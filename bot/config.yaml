@@ -1,0 +1,3 @@
+noop_log_path: logs/rebalance_noop.log
+rebalance_log_path: logs/rebalance.log
+chat_id: ""

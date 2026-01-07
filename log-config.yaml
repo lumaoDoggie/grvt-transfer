@@ -1,0 +1,71 @@
+version: 1
+formatters:
+  simple:
+    format: '%(asctime)s %(levelname)s %(message)s'
+    datefmt: '%Y-%m-%d %H:%M:%S'
+handlers:
+  rebalance_file:
+    class: logging.handlers.TimedRotatingFileHandler
+    level: INFO
+    formatter: simple
+    filename: logs/rebalance.log
+    when: midnight
+    backupCount: 7
+    encoding: utf-8
+  rebalance_stream:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: simple
+  noop_file:
+    class: logging.handlers.TimedRotatingFileHandler
+    level: INFO
+    formatter: simple
+    filename: logs/rebalance_noop.log
+    when: midnight
+    backupCount: 7
+    encoding: utf-8
+  noop_stream:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: simple
+  alerts_file:
+    class: logging.handlers.TimedRotatingFileHandler
+    level: INFO
+    formatter: simple
+    filename: logs/alerts.log
+    when: midnight
+    backupCount: 7
+    encoding: utf-8
+  alerts_stream:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: simple
+  errors_file:
+    class: logging.handlers.TimedRotatingFileHandler
+    level: INFO
+    formatter: simple
+    filename: logs/errors.log
+    when: midnight
+    backupCount: 7
+    encoding: utf-8
+  errors_stream:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: simple
+loggers:
+  rebalance:
+    level: INFO
+    handlers: [rebalance_file, rebalance_stream]
+    propagate: false
+  rebalance.noop:
+    level: INFO
+    handlers: [noop_file, noop_stream]
+    propagate: false
+  alerts:
+    level: INFO
+    handlers: [alerts_file, alerts_stream]
+    propagate: false
+  errors:
+    level: INFO
+    handlers: [errors_file, errors_stream]
+    propagate: false

@@ -1,0 +1,22 @@
+environment: prod
+triggerValue: 2000
+rebalanceIntervalSec: 15
+rebalanceOnce: false
+rebalanceThrottleMs: 1500
+fundingSweepThreshold: 0.1
+minAvailableBalanceAlertPercentage: 25
+bot:
+  # Set via TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID (.env.prod supported)
+  token: ""
+  chat_id: ""
+
+# Emergency position unwinding to prevent liquidation
+unwind:
+  enabled: true
+  dryRun: true                      # Log only, no actual orders
+  triggerMultiplier: 2.0            # Trigger when equity < 2× maint margin (liquidation at 1×)
+  recoveryMultiplier: 2.5           # Stop when equity > 2.5× maint margin
+  unwindPct: 10.0                   # Unwind 10% per iteration
+  maxIterations: 5                  # Max 5 iterations (≈50% total)
+  waitSecondsBetweenIterations: 5
+  minPositionNotional: 100          # Skip positions < $100

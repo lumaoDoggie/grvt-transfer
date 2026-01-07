@@ -1,0 +1,10 @@
+environment: prod
+account_id: ""
+funding_account_address: ""
+fundingAccountKey: ""
+fundingAccountSecret: ""
+trading_account_id: ""
+tradingAccountKey: ""
+tradingAccountSecret: ""
+chain_id: 325
+currency: USDT

@@ -1,0 +1,22 @@
+data/
+*.zip
+*.csv
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Runtime artifacts
+logs/
+*.log
+*.pid
+.env
+.env.*
+!.env.example
+bot/.botlock
+alerts/state.json
+bot/state.json
+bot/config.local.yaml
+config/**/*.local.yaml
+config/**/*.local.yml
+deploy*.tar.gz
