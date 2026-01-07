@@ -16,8 +16,10 @@ def load_env() -> bool:
         return False
 
     root = Path(__file__).resolve().parent
-    env = os.getenv("GRVT_ENV", "prod").lower()
 
+    # First, load base .env so it can define GRVT_ENV for env-specific loading.
     load_dotenv(dotenv_path=root / ".env", override=False)
+
+    env = os.getenv("GRVT_ENV", "prod").lower()
     load_dotenv(dotenv_path=root / f".env.{env}", override=True)
     return True
