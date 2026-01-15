@@ -308,10 +308,10 @@ class App:
 
         row = 1
         for label, var in [
-            ("triggerValue (USDT)", self.v_trigger),
-            ("rebalanceIntervalSec (秒)", self.v_interval),
-            ("fundingSweepThreshold (USDT)", self.v_sweep),
-            ("minAvailableBalanceAlertPercentage (%)", self.v_min_avail_pct),
+            ("再平衡触发阈值 (triggerValue, USDT)", self.v_trigger),
+            ("检查间隔 (rebalanceIntervalSec, 秒)", self.v_interval),
+            ("资金归集阈值 (fundingSweepThreshold, USDT)", self.v_sweep),
+            ("可用余额告警阈值 (minAvailableBalanceAlertPercentage, %)", self.v_min_avail_pct),
         ]:
             ttk.Label(frm_cfg, text=label).grid(row=row, column=0, sticky="w", padx=5, pady=5)
             e = ttk.Entry(frm_cfg, textvariable=var, width=30)
@@ -338,11 +338,11 @@ class App:
 
         row = 1
         for label, var in [
-            ("triggerPct (%)", self.v_unwind_trigger),
-            ("recoveryPct (%)", self.v_unwind_recovery),
-            ("maxIterations", self.v_unwind_max_iter),
-            ("waitSecondsBetweenIterations (秒)", self.v_unwind_wait),
-            ("minPositionNotional (USDT)", self.v_unwind_min_notional),
+            ("触发阈值 (triggerPct, %)", self.v_unwind_trigger),
+            ("恢复阈值 (recoveryPct, %)", self.v_unwind_recovery),
+            ("最大轮数 (maxIterations)", self.v_unwind_max_iter),
+            ("轮间等待 (waitSecondsBetweenIterations, 秒)", self.v_unwind_wait),
+            ("最小名义价值 (minPositionNotional, USDT)", self.v_unwind_min_notional),
         ]:
             ttk.Label(frm_unwind, text=label).grid(row=row, column=0, sticky="w", padx=5, pady=5)
             e = ttk.Entry(frm_unwind, textvariable=var, width=30)
