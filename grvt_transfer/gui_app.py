@@ -596,7 +596,7 @@ class App:
     def on_stop(self):
         if not self._runner:
             return
-        self.log.write("正在停止（等待当前 API 调用结束）…")
+        self.log.write("停止中...")
         self._set_stopping_ui()
         try:
             self._runner.request_stop()
