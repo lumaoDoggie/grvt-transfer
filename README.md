@@ -6,7 +6,7 @@ Language: 中文
 - **资金再平衡（Transfer/Rebalance）**：当 A/B 两个账户的余额差额超过阈值时，自动划转余额，让两边更接近
 划转路径:  账户A 交易账户(trading账户) --> 账户A 资金账户(funding账户) --> 账户B 资金账户--> 账户B交易账户
 
-- **紧急减仓（Unwind，可选）**：当保证金使用率过高时，按配置自动下 `reduce-only` 市价单做双边减仓，尽量把风险压回安全区
+- **紧急减仓（Unwind，可选）**：当保证金使用率过高时，按配置自动下市价单,分批做双边减仓
 - **Telegram 告警 + 状态查询**：支持告警推送，以及可以查询运行状态
 
 本脚本分为生产模式, 和 测试模式. (grvt有一个测试站, 里面是单独的账户系统,用于测试.)
@@ -25,28 +25,26 @@ GRVT 站点：
 ---
 
 ## Windows 
-### 如果在你自己机器跑也OK, 但是务必保证网络稳定. (grvt api调用不用翻墙, tg通知需要)
-### Windows GUI（推荐：不用进文件夹改配置）
-核心步骤.
+### 如果在你在个人电脑跑, 务必保证网络稳定. (grvt api调用不用翻墙, tg通知需要)
+核心步骤
 
-1. 
 1. 先在Telegram里找到 @BotFather 这个账号, 创建你自己的Telegram机器人, 拿到token.
 2. TG 上搜索 @userinfobot 这个机器人, 拿到你的chatId,发消息即可看到,回复里的那串数字就是。 
 3. 在两个Grvt账号里, 给FundingAccount 和 TradingAccount创建Api,  funding account的权限勾选(Internal Transfer; External Transfer), tradingAccount的勾选"Transfer; Trade"
 记录好分别对应的key,secret, id.  两个账号还需要绑定Google Authenticator验证器, 需要下载一个然后扫码绑定账号.
 4. 
-- 从GitHub Releases 下载 `grvt-transfer-windows.zip` 并解压
-- 运行（Release 方式）：双击 `grvt-transfer-gui.exe`
+- 从GitHub Releases ,选择最新版本,下载 `grvt-transfer-windows.zip` 并解压
+- 运行：双击 `grvt-transfer-gui.exe`
 5. 然后在页面里选择测试或者正式环境, 然后填入以上信息, 点击"验证", 验证通过后点击"开始"
 
 - 配置保存位置：`%APPDATA%\\grvt-transfer\\settings.json`（包含api key/secret，请自行注意电脑安全）
 
 ![alt text](image.png)
 
-图片里的3.4% 保证金使用率, 指的是多少的余额,被用来当作保证金, 当超过100%就会爆仓.
-余额=$143,989, 余额指的是账户余额
-可用金额, 是指账户 可以实际转出的金额 / 账户余额, 余额不足的情况，一般出现在一个账户大量未实现盈利的时候。这时候你需要手动关一些仓位，释放盈利。
-紧急减仓,  指保证金使用率大于多少的时候,触发紧急(自动)减仓
+- 图片里的3.4% 保证金使用率, 指的是多少的余额,被用来当作保证金, 当超过100%就会爆仓.
+- 余额=$143,989, 余额指的是账户余额
+- 可用金额, 是指账户 可以实际转出的金额 / 账户余额, 余额不足的情况，一般出现在一个账户大量未实现盈利的时候。这时候你需要手动关一些仓位，释放盈利。
+- 紧急减仓,  指保证金使用率大于多少的时候,触发紧急(自动)减仓
 
 ---
 
