@@ -431,7 +431,7 @@ class App:
         base = dict(self.settings.base_cfg or {})
         base["environment"] = env
         base["triggerValue"] = float(self.v_trigger.get().strip() or 0)
-        base["rebalanceIntervalSec"] = int(float(self.v_interval.get().strip() or 10))
+        base["rebalanceIntervalSec"] = int(float(self.v_interval.get().strip() or 15))
         base["fundingSweepThreshold"] = float(self.v_sweep.get().strip() or 0)
         base["minAvailableBalanceAlertPercentage"] = float(self.v_min_avail_pct.get().strip() or 0)
 

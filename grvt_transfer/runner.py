@@ -80,7 +80,7 @@ class RebalanceRunner:
 
         base = self._cfg_repo.base()
         trigger = Decimal(str(base.get("triggerValue", "0")))
-        interval = int(base.get("rebalanceIntervalSec", 10))
+        interval = int(base.get("rebalanceIntervalSec", 15))
 
         logger = setup_logger(base)
         noop_logger = setup_noop_logger(base)

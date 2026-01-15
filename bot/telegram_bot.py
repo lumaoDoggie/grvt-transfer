@@ -459,13 +459,6 @@ def _get_margin_status():
             except Exception:
                 pass
 
-            # Avoid hitting live APIs when we don't have configured secrets in this process.
-            # For GUI runs, the trading/funding credentials live in memory in the runner,
-            # while this Telegram process may only have empty config/<env>/account_*.yaml.
-            running_flag = bool((runtime or {}).get("running")) if isinstance(runtime, dict) else False
-            if runtime or running_flag:
-                return "暂无可用状态（刚启动或尚未产生第一条数据），请稍后再试。"
-
             cfg_a, cfg_b = repo.accounts()
             client_a = ClientFactory.trading_client(cfg_a)
             client_b = ClientFactory.trading_client(cfg_b)
@@ -503,14 +496,7 @@ def _get_margin_status():
 
 
 def start_polling():
-    # Persist the last processed offset to avoid duplicate handling on restarts.
     offset = None
-    try:
-        st = _read_state() or {}
-        saved = int(st.get("update_offset", 0) or 0)
-        offset = saved if saved > 0 else None
-    except Exception:
-        offset = None
     logger = logging.getLogger("alerts")
     try:
         logger.info(json.dumps({"bot_polling": "started"}))
@@ -534,8 +520,6 @@ def start_polling():
             try:
                 uid = int(u.get("update_id", 0))
                 offset = (uid + 1) if uid else offset
-                if offset:
-                    _save_state({"update_offset": int(offset)})
             except Exception:
                 pass
             m = u.get("message")
@@ -574,10 +558,7 @@ def start_polling():
                         pass
                     _answer_callback_query(str(cq.get("id")), text=("sent" if ok else "failed"))
         try:
-            payload = {"heartbeat_ts": time.time(), "chat_id": _get_chat_id()}
-            if offset:
-                payload["update_offset"] = int(offset)
-            _save_state(payload)
+            _save_state({"heartbeat_ts": time.time(), "chat_id": _get_chat_id()})
         except Exception:
             pass
         time.sleep(1)
