@@ -10,6 +10,7 @@ import logging
 import time
 
 from envutil import load_env as _load_env
+from decimal import Decimal
 
 _load_env()
 
@@ -64,7 +65,8 @@ def _token():
 
 
 def _state_path():
-    return os.path.join("bot", "state.json")
+    state_dir = os.getenv("GRVT_STATE_DIR", "").strip() or "bot"
+    return os.path.join(state_dir, "state.json")
 
 
 def _get_chat_id():
@@ -89,8 +91,11 @@ def _get_chat_id():
 
 
 def _save_chat_id(chat_id: str):
+    allowed_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    if allowed_chat_id and str(chat_id) != str(allowed_chat_id):
+        return
     try:
-        os.makedirs("bot", exist_ok=True)
+        os.makedirs(os.path.dirname(_state_path()) or ".", exist_ok=True)
         with open(_state_path(), "w", encoding="utf-8") as f:
             json.dump({"chat_id": str(chat_id)}, f)
     except Exception:
@@ -110,7 +115,7 @@ def _read_state():
 
 def _save_state(data: dict):
     try:
-        os.makedirs("bot", exist_ok=True)
+        os.makedirs(os.path.dirname(_state_path()) or ".", exist_ok=True)
         cur = _read_state()
         cur.update(data or {})
         with open(_state_path(), "w", encoding="utf-8") as f:
@@ -135,7 +140,7 @@ def _post_json(url: str, obj: dict):
     req = Request(url, data=data, headers={"Content-Type": "application/json"})
     for i in range(3):
         try:
-            with urlopen(req) as resp:
+            with urlopen(req, timeout=30) as resp:
                 s = resp.read().decode("utf-8")
                 return json.loads(s)
         except Exception as e:
@@ -152,15 +157,15 @@ def _post_json(url: str, obj: dict):
             raise
 
 
-def send_message(text: str, reply_markup: dict | None = None):
+def send_message(text: str, reply_markup: dict | None = None, chat_id: str | int | None = None):
     token = _token()
-    chat_id = _get_chat_id()
-    if not token or not chat_id:
+    resolved_chat_id = str(chat_id) if chat_id is not None else _get_chat_id()
+    if not token or not resolved_chat_id:
         return False, {"error": "missing_token_or_chat_id"}
     if not str(text or "").strip():
         return False, {"error": "empty_message_text"}
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {"chat_id": str(chat_id), "text": str(text)}
+    payload = {"chat_id": resolved_chat_id, "text": str(text)}
     if reply_markup:
         payload["reply_markup"] = reply_markup
     try:
@@ -176,18 +181,18 @@ def send_message(text: str, reply_markup: dict | None = None):
 
 def send_rebalance(event: dict):
     t = str(event.get("event_time_sh") or event.get("time") or "")
-    s = str(event.get("success"))
+    s = "成功" if event.get("success") else "失败"
     amt = str(event.get("transfer_usdt"))
     te = str(event.get("totalEquity"))
     aeq = str((event.get("trading_a") or {}).get("equity"))
     beq = str((event.get("trading_b") or {}).get("equity"))
-    text = f"reblance triggered! time:{t}, success:{s},  transferAmount:{amt}, totalEquity:{te}, accountAEquity:{aeq}, accountBEquity:{beq}"
-    kb = {"inline_keyboard": [[{"text": "view", "callback_data": "view_noop"}]]}
+    text = f"💰 再平衡已触发\n时间: {t}\n状态: {s}\n转账金额: ${amt}\n总权益: ${te}\n账户A权益: ${aeq}\n账户B权益: ${beq}"
+    kb = {"inline_keyboard": [[{"text": "查看状态", "callback_data": "view_noop"}]]}
     return send_message(text, reply_markup=kb)
 
 
 def send_warning(error):
-    text = f"Warning, api failed. error:{error}"
+    text = f"⚠️ 警告: API调用失败\n错误: {error}"
     return send_message(text)
 
 
@@ -200,7 +205,7 @@ def _get_updates(offset: int | None = None, timeout: int = 25):
         qs["offset"] = offset
     url = f"https://api.telegram.org/bot{token}/getUpdates?{urlencode(qs)}"
     try:
-        with urlopen(url) as resp:
+        with urlopen(url, timeout=timeout + 10) as resp:
             s = resp.read().decode("utf-8")
             data = json.loads(s)
             return data.get("result", [])
@@ -261,6 +266,83 @@ def _last_noop_line():
     return ""
 
 
+def _get_margin_status():
+    """Fetch live margin percentages and status for both accounts."""
+    last_error = None
+    for attempt in range(3):
+        try:
+            from repository import ConfigRepository, ClientFactory
+            from rebalance.services import SummaryService
+            from datetime import datetime
+
+            repo = ConfigRepository()
+            base_cfg = repo.base()
+            trigger = base_cfg.get("triggerValue", 2000)
+            unwind_cfg = base_cfg.get("unwind", {})
+            trigger_pct = unwind_cfg.get("triggerPct", 60)
+            recovery_pct = unwind_cfg.get("recoveryPct", 40)
+            show_unwind_thresholds = bool(unwind_cfg.get("enabled", False)) and (not bool(unwind_cfg.get("dryRun", True)))
+
+            cfg_a, cfg_b = repo.accounts()
+            client_a = ClientFactory.trading_client(cfg_a)
+            client_b = ClientFactory.trading_client(cfg_b)
+
+            eq_a, mm_a, avail_a, _ = SummaryService.trading_summary(cfg_a, client_a)
+            eq_b, mm_b, avail_b, _ = SummaryService.trading_summary(cfg_b, client_b)
+
+            if eq_a == 0 and eq_b == 0:
+                if attempt < 2:
+                    time.sleep(1)
+                    continue
+                return "API returned zero equity - try again"
+
+            def calc_pct(eq, mm):
+                if eq <= 0:
+                    return "N/A"
+                if mm <= 0:
+                    return "0.0%"
+                pct = (mm / eq) * Decimal("100")
+                return f"{pct:.1f}%"
+
+            def avail_pct(eq, avail):
+                if eq <= 0:
+                    return "N/A"
+                return f"{(avail / eq) * Decimal('100'):.1f}%"
+
+            pct_a = calc_pct(eq_a, mm_a)
+            pct_b = calc_pct(eq_b, mm_b)
+            delta = eq_a - eq_b
+            total_eq = eq_a + eq_b
+
+            import state
+            last_check = state.get_last_check_time()
+            now_str = last_check if last_check else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            text = (
+                f"📊 上次检查时间 @ {now_str}\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"触发转账阈值: ${trigger:,} | 账户差额: ${delta:,.0f}\n"
+                f"总余额: ${total_eq:,.0f}\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"账户A: {pct_a} 保证金使用率\n"
+                f"  余额=${eq_a:,.0f} | 可用金额={avail_pct(eq_a, avail_a)}\n"
+                f"账户B: {pct_b} 保证金使用率\n"
+                f"  余额=${eq_b:,.0f} | 可用金额={avail_pct(eq_b, avail_b)}"
+            )
+            if show_unwind_thresholds:
+                text += (
+                    f"\n"
+                    f"━━━━━━━━━━━━━━━━━━\n"
+                    f"紧急平仓触发: ≥{trigger_pct}% | 紧急平仓停止: <{recovery_pct}%"
+                )
+            return text
+        except Exception as e:
+            last_error = e
+            if attempt < 2:
+                time.sleep(1)
+    return f"Error fetching status: {str(last_error)[:100]}"
+
+
 def start_polling():
     offset = None
     logger = logging.getLogger("alerts")
@@ -291,14 +373,17 @@ def start_polling():
             m = u.get("message")
             if m:
                 cid = (m.get("chat") or {}).get("id")
+                allowed_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+                if cid and allowed_chat_id and str(cid) != str(allowed_chat_id):
+                    continue
                 if cid:
                     _save_chat_id(cid)
                 txt = str(m.get("text", ""))
                 if txt.strip() == "/start":
-                    send_message("ok")
+                    send_message("ok", chat_id=cid)
                 elif txt.strip().lower() in ("/view", "view"):
-                    line = _last_noop_line()
-                    ok, _ = send_message(line or "No noop log entry yet.")
+                    status = _get_margin_status()
+                    ok, _ = send_message(status, chat_id=cid)
                     try:
                         logging.getLogger("alerts").info(json.dumps({"text_cmd": "view", "sent": ok}))
                     except Exception:
@@ -307,11 +392,14 @@ def start_polling():
             if cq:
                 data = str(cq.get("data", ""))
                 cid = ((cq.get("message") or {}).get("chat") or {}).get("id")
+                allowed_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+                if cid and allowed_chat_id and str(cid) != str(allowed_chat_id):
+                    continue
                 if cid:
                     _save_chat_id(cid)
                 if data == "view_noop":
-                    line = _last_noop_line()
-                    ok, res = send_message(line or "No noop log entry yet.")
+                    status = _get_margin_status()
+                    ok, res = send_message(status, chat_id=cid)
                     try:
                         logging.getLogger("alerts").info(json.dumps({"callback": "view_noop", "sent": ok}))
                     except Exception:
@@ -345,48 +433,50 @@ def _watchdog():
     logger = logging.getLogger("alerts")
     stale_threshold = 60  # seconds without heartbeat update = stale
     check_interval = 30  # check every 30 seconds
-    
-    while not _stop_event.is_set():
+
+    while True:
         try:
             time.sleep(check_interval)
-            if _stop_event.is_set():
-                break
-            
+
             # Check if polling thread is alive
             if _polling_thread is None or not _polling_thread.is_alive():
                 try:
                     logger.info(json.dumps({"watchdog": "polling_thread_dead", "restarting": True}))
                 except Exception:
                     pass
+                _stop_event.clear()
                 _start_polling_thread()
                 continue
-            
+
             # Check heartbeat staleness
             if _heartbeat_stale(stale_threshold):
                 try:
                     logger.info(json.dumps({"watchdog": "heartbeat_stale", "restarting": True}))
                 except Exception:
                     pass
-                # Thread appears stuck, restart it
+                # Signal old thread to stop, wait, then start new one
                 _stop_event.set()
-                time.sleep(2)
+                time.sleep(3)
+                _stop_event.clear()
                 _start_polling_thread()
-                
+
         except Exception as e:
             try:
                 logging.getLogger("errors").info(json.dumps({"error": "watchdog_error", "exception": str(e)}, default=str))
             except Exception:
                 pass
+            time.sleep(5)  # backoff on error
 
 
 def _lock_path():
-    return os.path.join("bot", ".botlock")
+    state_dir = os.getenv("GRVT_STATE_DIR", "").strip() or "bot"
+    return os.path.join(state_dir, ".botlock")
 
 
 def _acquire_lock():
     global _lock_pid
     try:
-        os.makedirs("bot", exist_ok=True)
+        os.makedirs(os.path.dirname(_lock_path()) or ".", exist_ok=True)
         lp = _lock_path()
         fd = os.open(lp, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         try:

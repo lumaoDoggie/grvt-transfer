@@ -6,5 +6,3 @@ fundingAccountSecret: ""
 trading_account_id: ""
 tradingAccountKey: ""
 tradingAccountSecret: ""
-chain_id: 326
-currency: USDT

@@ -1,16 +1,30 @@
 from datetime import datetime
-from zoneinfo import ZoneInfo
+
+try:
+    from zoneinfo import ZoneInfo  # py>=3.9
+except Exception:  # pragma: no cover
+    ZoneInfo = None  # type: ignore[assignment]
 
 
 class TimeUtil:
     @staticmethod
+    def _sh_tz():
+        if ZoneInfo is None:
+            return None
+        try:
+            return ZoneInfo("Asia/Shanghai")
+        except Exception:
+            return None
+
+    @staticmethod
     def event_time_sh(obj: dict):
+        tz = TimeUtil._sh_tz()
         try:
             ns = int(str(obj.get("event_time")))
-            dt = datetime.fromtimestamp(ns / 1_000_000_000, tz=ZoneInfo("Asia/Shanghai"))
+            dt = datetime.fromtimestamp(ns / 1_000_000_000, tz=tz) if tz else datetime.fromtimestamp(ns / 1_000_000_000)
             return dt.strftime("%Y-%m-%d %H:%M:%S")
         except Exception:
-            return datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S")
+            return (datetime.now(tz) if tz else datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
 
 
 class FundingUtil:

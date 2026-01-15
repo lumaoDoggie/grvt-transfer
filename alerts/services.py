@@ -12,12 +12,7 @@ class AlertService:
         try:
             from bot.telegram_bot import send_rebalance
             if ("transfer_usdt" in event) or ("success" in event):
-                st = AlertService._read_state()
-                cnt = int(st.get("rebalance_alert_counter", 0))
-                cnt += 1
-                if (cnt % 5) == 0:
-                    send_rebalance(event)
-                AlertService._save_state({"rebalance_alert_counter": cnt})
+                send_rebalance(event)
         except Exception:
             pass
 
@@ -69,10 +64,10 @@ class AlertService:
                 return False
             from bot.telegram_bot import send_message
             text = (
-                f"⚠️ Low Collateral [{account_label}]\n"
-                f"Time: {payload.get('event_time_sh')}\n"
-                f"Equity: {payload.get('equity')}\n"
-                f"Available: {payload.get('available')} ({payload.get('avail_pct')}%)"
+                f"⚠️ 可用余额不足 [{account_label}]\n"
+                f"时间: {payload.get('event_time_sh')}\n"
+                f"权益: {payload.get('equity')}\n"
+                f"可用: {payload.get('available')} ({payload.get('avail_pct')}%)"
             )
             ok, _ = send_message(text)
             if ok:
@@ -92,31 +87,31 @@ class AlertService:
             dry_run_tag = "[DRY RUN] " if event.get("dry_run") else ""
             
             if event.get("triggered"):
-                # Unwind triggered - show margin ratios and which accounts triggered
-                ratio1 = event.get('ratio1', '?')
-                ratio2 = event.get('ratio2', '?')
+                # Unwind triggered - show margin percentages and which accounts triggered
+                pct1 = event.get('pct1', '?')
+                pct2 = event.get('pct2', '?')
                 trigger_at = event.get('trigger_at', '?')
                 trigger1 = "⚠️" if event.get('trigger1') else "✅"
                 trigger2 = "⚠️" if event.get('trigger2') else "✅"
-                
+
                 text = (
-                    f"🚨 {dry_run_tag}UNWIND TRIGGERED\n"
+                    f"🚨 {dry_run_tag}触发紧急平仓\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
-                    f"{trigger1} Account A: {ratio1}× margin\n"
-                    f"{trigger2} Account B: {ratio2}× margin\n"
+                    f"{trigger1} 账户A: {pct1} 保证金使用率\n"
+                    f"{trigger2} 账户B: {pct2} 保证金使用率\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
-                    f"Trigger at: <{trigger_at}× margin"
+                    f"触发条件: ≥{trigger_at} 保证金使用率"
                 )
             else:
                 # Unwind completed
                 iterations = event.get("iterations", 0)
                 successful = event.get("successful", 0)
                 failed = event.get("failed", 0)
-                final_ratio1 = event.get("final_ratio1", "?")
-                final_ratio2 = event.get("final_ratio2", "?")
+                final_pct1 = event.get("final_pct1", "?")
+                final_pct2 = event.get("final_pct2", "?")
                 account_a = event.get("account_a", [])
                 account_b = event.get("account_b", [])
-                
+
                 def sum_account(orders):
                     """Calculate total size and notional per token for an account"""
                     by_token = {}
@@ -132,25 +127,29 @@ class AlertService:
                         except:
                             pass
                     return by_token
-                
+
                 a_tokens = sum_account(account_a)
                 b_tokens = sum_account(account_b)
-                
-                def format_tokens(tokens, label):
+
+                def format_tokens(tokens):
                     if not tokens:
-                        return f"{label}: none"
-                    parts = [f"{t} {v['size']:.2f} (${v['notional']:,.0f})" for t, v in tokens.items()]
-                    return f"{label}: " + ", ".join(parts)
-                
+                        return "  (无)"
+                    lines = []
+                    for t, v in tokens.items():
+                        lines.append(f"  {t}: {v['size']:.2f} (${v['notional']:,.0f})")
+                    return "\n".join(lines)
+
                 status = "✅" if failed == 0 else "⚠️"
                 text = (
-                    f"{status} {dry_run_tag}UNWIND COMPLETED\n"
+                    f"{status} {dry_run_tag}紧急平仓完成\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
-                    f"Orders: {successful}✓ {failed}✗\n"
-                    f"{format_tokens(a_tokens, 'A')}\n"
-                    f"{format_tokens(b_tokens, 'B')}\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"A: {final_ratio1}× | B: {final_ratio2}×"
+                    f"订单: {successful}✓ {failed}✗\n"
+                    f"\n"
+                    f"账户A:\n{format_tokens(a_tokens)}\n"
+                    f"账户B:\n{format_tokens(b_tokens)}\n"
+                    f"\n"
+                    f"最终保证金使用率:\n"
+                    f"  A: {final_pct1} | B: {final_pct2}"
                 )
             send_message(text)
         except Exception:
@@ -163,17 +162,17 @@ class AlertService:
         logger.info(json.dumps({"unwind_recovery": event}, default=str))
         try:
             from bot.telegram_bot import send_message
-            ratio1 = event.get('ratio1', '?')
-            ratio2 = event.get('ratio2', '?')
+            pct1 = event.get('pct1', '?')
+            pct2 = event.get('pct2', '?')
             recovery_at = event.get('recovery_at', '?')
             iteration = event.get('iteration', '?')
             text = (
-                f"✅ MARGIN RECOVERED\n"
+                f"✅ 保证金已恢复\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
-                f"Account A: {ratio1}× margin\n"
-                f"Account B: {ratio2}× margin\n"
+                f"账户A: {pct1} 保证金使用率\n"
+                f"账户B: {pct2} 保证金使用率\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
-                f"Recovery: >{recovery_at}× after {iteration} iter"
+                f"恢复条件: <{recovery_at} 经过 {iteration} 轮"
             )
             send_message(text)
         except Exception:
@@ -189,8 +188,10 @@ class AlertService:
                 from bot.telegram_bot import send_message
                 account = event.get('account', '?')
                 instrument = event.get('instrument', '?')
+                size = event.get('size')
                 error = str(event.get('error', 'unknown'))[:80]
-                text = f"❌ UNWIND FAILED: {account} {instrument}\n{error}"
+                size_line = f"\nsize={str(size)[:32]}" if size else ""
+                text = f"❌ 紧急平仓失败: {account} {instrument}{size_line}\n{error}"
                 send_message(text)
             except Exception:
                 pass

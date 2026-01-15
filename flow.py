@@ -3,7 +3,7 @@ import time
 import logging
 from decimal import Decimal
 from eth_account import Account as EthAccount
-from repository import ClientFactory, _get_env
+from repository import ClientFactory, _get_env, get_chain_id
 from pysdk.grvt_raw_base import GrvtApiConfig
 from pysdk.grvt_raw_env import GrvtEnv
 from rebalance.services import TransferService
@@ -20,9 +20,8 @@ def _get_grvt_env():
 class TransferFlow:
     @staticmethod
     def execute(a_cfg: dict, b_cfg: dict, amount_dec: Decimal, throttle_ms: int = 0, logger: logging.Logger | None = None):
-        currency = str(a_cfg.get("currency", "USDT"))
-        chain_a = int(a_cfg.get("chain_id", 325))
-        chain_b = int(b_cfg.get("chain_id", 325))
+        currency = "USDT"
+        chain_id = get_chain_id()
         amt_str = f"{amount_dec:.6f}"
 
         a_funding_addr = str(a_cfg.get("funding_account_address"))
@@ -69,7 +68,7 @@ class TransferFlow:
         acct_b_funding = EthAccount.from_key(str(b_cfg.get("fundingAccountSecret")))
         acct_b_trading = EthAccount.from_key(str(b_cfg.get("tradingAccountSecret")))
 
-        req_a_internal = TransferService.build_req(api_a_trading, acct_a_trading, a_funding_addr, a_trading_sub, a_funding_addr, "0", currency, amt_str, chain_a)
+        req_a_internal = TransferService.build_req(api_a_trading, acct_a_trading, a_funding_addr, a_trading_sub, a_funding_addr, "0", currency, amt_str, chain_id)
         if throttle_ms > 0:
             time.sleep(throttle_ms / 1000.0)
         ok1, info1 = TransferService.try_transfer(client_a_trading, req_a_internal)
@@ -80,7 +79,7 @@ class TransferFlow:
                 pass
             return False, info1
 
-        req_ff = TransferService.build_req(api_a_funding, acct_a_funding, a_funding_addr, "0", b_funding_addr, "0", currency, amt_str, chain_a)
+        req_ff = TransferService.build_req(api_a_funding, acct_a_funding, a_funding_addr, "0", b_funding_addr, "0", currency, amt_str, chain_id)
         ok2, info2 = TransferService.try_transfer(client_a_funding, req_ff)
         if not ok2:
             try:
@@ -89,7 +88,7 @@ class TransferFlow:
                 pass
             return False, info2
 
-        req_b_deposit = TransferService.build_req(api_b_funding, acct_b_funding, b_funding_addr, "0", b_funding_addr, b_trading_sub, currency, amt_str, chain_b)
+        req_b_deposit = TransferService.build_req(api_b_funding, acct_b_funding, b_funding_addr, "0", b_funding_addr, b_trading_sub, currency, amt_str, chain_id)
         ok3, info3 = TransferService.try_transfer(client_b_funding, req_b_deposit)
         if not ok3:
             try:
@@ -114,8 +113,8 @@ class BalanceSweeper:
         bal, _ = SummaryService.funding_usdt_balance(cfg)
         if bal <= threshold:
             return False, {"balance": str(bal)}
-        chain_id = int(cfg.get("chain_id", 325))
-        currency = str(cfg.get("currency", "USDT"))
+        chain_id = get_chain_id()
+        currency = "USDT"
         amt_str = f"{bal:.6f}"
         funding_addr = str(cfg.get("funding_account_address"))
         trading_sub = str(cfg.get("trading_account_id"))

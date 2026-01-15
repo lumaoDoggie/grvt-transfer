@@ -5,11 +5,13 @@ data/
 # Python
 __pycache__/
 *.py[cod]
+.venv/
 
 # Runtime artifacts
 logs/
 *.log
 *.pid
+.claude/
 .env
 .env.*
 !.env.example
@@ -20,3 +22,8 @@ bot/config.local.yaml
 config/**/*.local.yaml
 config/**/*.local.yml
 deploy*.tar.gz
+tmpclaude-*-cwd
+DEPLOYMENT.md
+dist/
+build/
+*.spec

@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install minimal deps
+        run: python -m pip install --upgrade pip PyYAML
+      - name: Python syntax check
+        run: python -m compileall -q .
+      - name: YAML parse check
+        run: |
+          python - <<'PY'
+          import os, sys
+          import yaml
+
+          skip_dirs = {'.git', '.venv', '__pycache__', 'logs', '.claude'}
+          errors = []
+          count = 0
+          for root, dirs, files in os.walk('.'):
+            dirs[:] = [d for d in dirs if d not in skip_dirs]
+            for name in files:
+              if not (name.endswith('.yaml') or name.endswith('.yml')):
+                continue
+              path = os.path.join(root, name)
+              try:
+                with open(path, 'r', encoding='utf-8') as f:
+                  yaml.safe_load(f)
+                count += 1
+              except Exception as e:
+                errors.append((path, str(e)))
+
+          if errors:
+            print('YAML parse errors:')
+            for path, msg in errors:
+              print(f'- {path}: {msg}')
+            sys.exit(1)
+          print(f'OK - parsed {count} YAML files')
+          PY
+

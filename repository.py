@@ -11,6 +11,11 @@ def _get_env() -> str:
     return os.getenv("GRVT_ENV", "prod").lower()
 
 
+def get_chain_id() -> int:
+    """Get chain ID based on environment. Testnet=326, Prod=325."""
+    return 326 if _get_env() == "test" else 325
+
+
 def _config_dir() -> str:
     """Get config directory based on environment."""
     env = _get_env()
@@ -47,8 +52,6 @@ def _apply_account_env_overrides(cfg: dict, prefix: str) -> dict:
     account_id = _env_str(f"{prefix}_ACCOUNT_ID")
     funding_addr = _env_str(f"{prefix}_FUNDING_ACCOUNT_ADDRESS")
     trading_sub_id = _env_str(f"{prefix}_TRADING_ACCOUNT_ID")
-    chain_id = _env_str(f"{prefix}_CHAIN_ID")
-    currency = _env_str(f"{prefix}_CURRENCY")
 
     funding_key = _env_str(f"{prefix}_FUNDING_ACCOUNT_KEY")
     funding_secret = _env_str(f"{prefix}_FUNDING_ACCOUNT_SECRET")
@@ -61,10 +64,6 @@ def _apply_account_env_overrides(cfg: dict, prefix: str) -> dict:
         out["funding_account_address"] = funding_addr
     if trading_sub_id is not None:
         out["trading_account_id"] = trading_sub_id
-    if chain_id is not None:
-        out["chain_id"] = chain_id
-    if currency is not None:
-        out["currency"] = currency
 
     if funding_key is not None:
         out["fundingAccountKey"] = funding_key
@@ -91,9 +90,6 @@ class ConfigRepository:
 
     def base(self) -> dict:
         cfg_path = os.path.join(self._config_dir, "config.yaml")
-        if not os.path.exists(cfg_path):
-            # Fallback to root config.yaml
-            cfg_path = "config.yaml"
         if os.path.exists(cfg_path):
             with open(cfg_path, "r", encoding="utf-8") as f:
                 return yaml.safe_load(f) or {}
@@ -102,11 +98,6 @@ class ConfigRepository:
     def accounts(self) -> tuple[dict, dict]:
         c1_path = os.path.join(self._config_dir, "account_1_config.yaml")
         c2_path = os.path.join(self._config_dir, "account_2_config.yaml")
-        # Fallback to root if not in env folder
-        if not os.path.exists(c1_path):
-            c1_path = "account_1_config.yaml"
-        if not os.path.exists(c2_path):
-            c2_path = "account_2_config.yaml"
 
         cfg1 = _apply_account_env_overrides(_load_yaml_optional(c1_path), "ACC1")
         cfg2 = _apply_account_env_overrides(_load_yaml_optional(c2_path), "ACC2")
@@ -114,8 +105,6 @@ class ConfigRepository:
 
     def logger(self) -> dict:
         log_path = os.path.join(self._config_dir, "log-config.yaml")
-        if not os.path.exists(log_path):
-            log_path = "log-config.yaml"
         if os.path.exists(log_path):
             with open(log_path, "r", encoding="utf-8") as f:
                 return yaml.safe_load(f) or {}

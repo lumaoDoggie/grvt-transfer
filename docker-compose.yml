@@ -1,0 +1,13 @@
+services:
+  grvt-transfer:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - GRVT_STATE_DIR=/app/data/bot
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+      - ./data:/app/data
+

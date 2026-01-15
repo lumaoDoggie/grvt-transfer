@@ -1,22 +1,58 @@
 environment: test
+# ================================
+# 测试环境配置（test）
+#
+# 说明：test 环境主要用于验证“再平衡 + 紧急减仓”的逻辑与告警是否正常。
+# 强烈建议先在 test 环境跑通全流程再上 prod。
+# ================================
+
+# 触发转账阈值（USDT）：当 |账户A余额 - 账户B余额| >= 该值 时触发再平衡
 triggerValue: 2000
+
+# 主循环间隔（秒）
 rebalanceIntervalSec: 30
+
+# 只执行一次后退出（用于手动测试/排障）
 rebalanceOnce: false
-rebalanceThrottleMs: 1500
+
+# 资金归集阈值（USDT）：当 funding 账户余额高于该值时，自动归集到 trading
 fundingSweepThreshold: 0.1
+
+# 可用余额告警阈值（百分比）：当 (available / equity * 100) < 该值 时发送 Telegram 告警
+# （可用余额不足的情况, 一般出现在一个账户大量未实现盈利的时候. 这时候你需要手动关一些仓位,释放盈利）
 minAvailableBalanceAlertPercentage: 15
 bot:
-  # Set via TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID (.env.test supported)
+  # Telegram：建议通过环境变量设置（.env / .env.test）
+  # - TELEGRAM_BOT_TOKEN：机器人 token
+  # - TELEGRAM_CHAT_ID：允许接收/发送命令的 chat id（用于限制只有你能操作机器人）
   token: ""
   chat_id: ""
 
-# Emergency position unwinding to prevent liquidation
+# ================================
+# 紧急减仓（unwind）
+#
+# 保证金使用率 = maintenance_margin / equity
+# - 100% 表示达到爆仓线
+#
+# ================================
 unwind:
+  # 是否启用紧急减仓逻辑
   enabled: true
-  dryRun: true                      # Log only, no actual orders
-  triggerMultiplier: 2.0            # Trigger when equity < 2× maint margin (liquidation at 1×)
-  recoveryMultiplier: 2.5           # Stop when equity > 2.5× maint margin
-  unwindPct: 10.0                   # Unwind 10% per iteration
-  maxIterations: 5                  # Max 5 iterations (≈50% total)
-  waitSecondsBetweenIterations: 5
-  minPositionNotional: 100          # Skip positions < $100
+
+  # 是否仅演练（true=只记录/告警，不真正减仓；false=真正减仓）
+  dryRun: false
+
+  # 触发阈值（百分比）：当保证金使用率 >= 该值 时触发减仓
+  triggerPct: 5
+
+  # 恢复阈值（百分比）：当保证金使用率 < 该值 时停止减仓
+  recoveryPct: 3
+
+  # 最大减仓轮数：0 表示不限制
+  maxIterations: 0
+
+  # 两轮减仓之间的冷却时间（秒）
+  waitSecondsBetweenIterations: 2
+
+  # 最小仓位名义价值（USDT）
+  minPositionNotional: 100

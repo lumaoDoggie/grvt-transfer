@@ -7,6 +7,7 @@ from pysdk.grvt_raw_base import GrvtError
 from pysdk.grvt_raw_sync import types
 from repository import ClientFactory, ConfigRepository
 from utils import TimeUtil, FundingUtil, TxUtil
+import state
 
 
 class SummaryService:
@@ -15,7 +16,8 @@ class SummaryService:
         client = client or ClientFactory.trading_client(cfg)
         from pysdk import grvt_raw_types as rt
         sub_id = str(cfg.get("trading_account_id"))
-        for i in range(3):
+        last_error = None
+        for i in range(4):  # 4 retries with exponential backoff
             try:
                 res = client.sub_account_summary_v1(rt.ApiSubAccountSummaryRequest(sub_account_id=sub_id))
                 obj = dataclasses.asdict(res)["result"] if not isinstance(res, GrvtError) else {}
@@ -24,44 +26,52 @@ class SummaryService:
                 avail = Decimal(obj.get("available_balance", "0"))
                 return eq, mm, avail, obj
             except Exception as e:
+                last_error = e
                 try:
-                    logging.getLogger("errors").info(json.dumps({"error": "trading_summary", "sub_account_id": sub_id, "exception": str(e)}, default=str))
+                    logging.getLogger("errors").info(json.dumps({"error": "trading_summary", "sub_account_id": sub_id, "attempt": i + 1, "exception": str(e)}, default=str))
                 except Exception:
                     pass
-                try:
-                    from alerts.services import AlertService
-                    AlertService.dispatch_warning({"trading_summary_error": str(e), "sub_account_id": sub_id})
-                except Exception:
-                    pass
-                if i < 2:
-                    time.sleep(1)
+                if i < 3:
+                    time.sleep(2 ** i)  # Exponential backoff: 1s, 2s, 4s
+        # Only alert after all retries exhausted
+        if last_error:
+            try:
+                from alerts.services import AlertService
+                AlertService.dispatch_warning({"trading_summary_error": str(last_error), "sub_account_id": sub_id, "retries_exhausted": True})
+            except Exception:
+                pass
         return Decimal("0"), Decimal("0"), Decimal("0"), {}
 
     @staticmethod
     def funding_summary(cfg: dict, client=None):
         client = client or ClientFactory.funding_client(cfg)
-        for i in range(3):
+        last_error = None
+        for i in range(4):  # 4 retries with exponential backoff
             try:
                 res = client.funding_account_summary_v1(types.EmptyRequest())
                 return dataclasses.asdict(res)
             except Exception as e:
+                last_error = e
                 try:
-                    logging.getLogger("errors").info(json.dumps({"error": "funding_summary", "account": str(cfg.get("account_id")), "exception": str(e)}, default=str))
+                    logging.getLogger("errors").info(json.dumps({"error": "funding_summary", "account": str(cfg.get("account_id")), "attempt": i + 1, "exception": str(e)}, default=str))
                 except Exception:
                     pass
-                try:
-                    from alerts.services import AlertService
-                    AlertService.dispatch_warning({"funding_summary_error": str(e), "account": str(cfg.get("account_id"))})
-                except Exception:
-                    pass
-                if i < 2:
-                    time.sleep(1)
+                if i < 3:
+                    time.sleep(2 ** i)  # Exponential backoff: 1s, 2s, 4s
+        # Only alert after all retries exhausted
+        if last_error:
+            try:
+                from alerts.services import AlertService
+                AlertService.dispatch_warning({"funding_summary_error": str(last_error), "account": str(cfg.get("account_id")), "retries_exhausted": True})
+            except Exception:
+                pass
         return {"result": {"spot_balances": []}}
 
     @staticmethod
     def funding_usdt_balance(cfg: dict, client=None):
         client = client or ClientFactory.funding_client(cfg)
-        for i in range(3):
+        last_error = None
+        for i in range(4):  # 4 retries with exponential backoff
             try:
                 res = client.funding_account_summary_v1(types.EmptyRequest())
                 obj = dataclasses.asdict(res)
@@ -76,17 +86,20 @@ class SummaryService:
                         break
                 return bal, obj
             except Exception as e:
+                last_error = e
                 try:
-                    logging.getLogger("errors").info(json.dumps({"error": "funding_balance", "account": str(cfg.get("account_id")), "exception": str(e)}, default=str))
+                    logging.getLogger("errors").info(json.dumps({"error": "funding_balance", "account": str(cfg.get("account_id")), "attempt": i + 1, "exception": str(e)}, default=str))
                 except Exception:
                     pass
-                try:
-                    from alerts.services import AlertService
-                    AlertService.dispatch_warning({"funding_balance_error": str(e), "account": str(cfg.get("account_id"))})
-                except Exception:
-                    pass
-                if i < 2:
-                    time.sleep(1)
+                if i < 3:
+                    time.sleep(2 ** i)  # Exponential backoff: 1s, 2s, 4s
+        # Only alert after all retries exhausted
+        if last_error:
+            try:
+                from alerts.services import AlertService
+                AlertService.dispatch_warning({"funding_balance_error": str(last_error), "account": str(cfg.get("account_id")), "retries_exhausted": True})
+            except Exception:
+                pass
         return Decimal("0"), {"result": {"spot_balances": []}}
 
 
@@ -204,6 +217,7 @@ class RebalanceService:
         client2 = ClientFactory.trading_client(cfg2)
         eq1, mm1, avail1, t1 = SummaryService.trading_summary(cfg1, client1)
         eq2, mm2, avail2, t2 = SummaryService.trading_summary(cfg2, client2)
+        state.set_last_check_time(TimeUtil.event_time_sh(t1))
         f_client1 = ClientFactory.funding_client(cfg1)
         f_client2 = ClientFactory.funding_client(cfg2)
         f1 = SummaryService.funding_summary(cfg1, f_client1)
@@ -214,14 +228,15 @@ class RebalanceService:
         alert_pct = Decimal(str(base_cfg.get("minAvailableBalanceAlertPercentage", 20)))
         try:
             from alerts.services import AlertService
-            if pct1 < alert_pct:
+            # Skip alert if equity is 0 (likely API error)
+            if pct1 < alert_pct and eq1 > Decimal("0"):
                 AlertService.dispatch_availability_alert("A", {
                     "event_time_sh": TimeUtil.event_time_sh(t1),
                     "equity": str(eq1),
                     "available": str(avail1),
                     "avail_pct": f"{pct1:.4f}",
                 })
-            if pct2 < alert_pct:
+            if pct2 < alert_pct and eq2 > Decimal("0"):
                 AlertService.dispatch_availability_alert("B", {
                     "event_time_sh": TimeUtil.event_time_sh(t2),
                     "equity": str(eq2),
@@ -259,16 +274,18 @@ class RebalanceService:
                 eq1_retry, eq2_retry = eq1, eq2  # Keep original on error
             
             if (eq1_retry == Decimal("0") or eq2_retry == Decimal("0")):
-                # Still zero after retry - send alert
+                # Still zero after retry - log it
                 try:
                     logging.getLogger("errors").info(json.dumps({"error": "rebalance_skip_zero_equity", "eq1": str(eq1_retry), "eq2": str(eq2_retry)}, default=str))
                 except Exception:
                     pass
-                try:
-                    from alerts.services import AlertService
-                    AlertService.dispatch_warning({"rebalance_skipped": "zero_equity_detected", "eq1": str(eq1_retry), "eq2": str(eq2_retry)})
-                except Exception:
-                    pass
+                # Only alert if ONE account is zero (real concern), not both (likely API failure)
+                if not (eq1_retry == Decimal("0") and eq2_retry == Decimal("0")):
+                    try:
+                        from alerts.services import AlertService
+                        AlertService.dispatch_warning({"rebalance_skipped": "zero_equity_detected", "eq1": str(eq1_retry), "eq2": str(eq2_retry)})
+                    except Exception:
+                        pass
                 return {"action": "blocked_zero_equity", "eq1": str(eq1_retry), "eq2": str(eq2_retry), "mm1": str(mm1), "mm2": str(mm2)}
             else:
                 # Recovered after retry - use new values

@@ -112,7 +112,7 @@ def main_cli():
     args = parser.parse_args()
     trigger = Decimal(str(args.trigger if args.trigger is not None else base.get("triggerValue", "0.03")))
     interval = int(args.interval if args.interval is not None else int(base.get("rebalanceIntervalSec", 10)))
-    throttle_ms = int(args.throttleMs if args.throttleMs is not None else int(base.get("rebalanceThrottleMs", 0)))
+    throttle_ms = int(args.throttleMs if args.throttleMs is not None else 2000)
     once = bool(args.once or bool(base.get("rebalanceOnce", False)))
     logger = setup_logger(base)
     noop_logger = setup_noop_logger(base)
