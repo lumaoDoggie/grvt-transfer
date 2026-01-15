@@ -246,7 +246,7 @@ class App:
 
         self.v_tg_token = StringVar()
         self.v_tg_chat = StringVar()
-        ttk.Label(frm_tg, text="Bot Token").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        ttk.Label(frm_tg, text="机器人 Token").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         ttk.Entry(frm_tg, textvariable=self.v_tg_token, width=60).grid(row=0, column=1, sticky="we", padx=5, pady=5)
         ttk.Label(frm_tg, text="Chat ID").grid(row=1, column=0, sticky="w", padx=5, pady=5)
         ttk.Entry(frm_tg, textvariable=self.v_tg_chat, width=60).grid(row=1, column=1, sticky="we", padx=5, pady=5)
@@ -258,13 +258,13 @@ class App:
         frm_b.pack(fill="x", padx=5, pady=5)
 
         self.acc_fields = [
-            ("account_id", "Account ID"),
-            ("funding_account_address", "Funding Address"),
-            ("fundingAccountKey", "Funding Key"),
-            ("fundingAccountSecret", "Funding Secret"),
-            ("trading_account_id", "tradingAccountId"),
-            ("tradingAccountKey", "Trading Key"),
-            ("tradingAccountSecret", "Trading Secret"),
+            ("account_id", "账户ID (account_id)"),
+            ("funding_account_address", "资金账户地址 (funding_account_address)"),
+            ("fundingAccountKey", "资金账户Key (fundingAccountKey)"),
+            ("fundingAccountSecret", "资金账户Secret (fundingAccountSecret)"),
+            ("trading_account_id", "交易账户ID (tradingAccountId)"),
+            ("tradingAccountKey", "交易账户Key (tradingAccountKey)"),
+            ("tradingAccountSecret", "交易账户Secret (tradingAccountSecret)"),
         ]
         self.v_a = {k: StringVar() for k, _ in self.acc_fields}
         self.v_b = {k: StringVar() for k, _ in self.acc_fields}
