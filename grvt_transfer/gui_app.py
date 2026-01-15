@@ -262,7 +262,7 @@ class App:
             ("funding_account_address", "Funding Address"),
             ("fundingAccountKey", "Funding Key"),
             ("fundingAccountSecret", "Funding Secret"),
-            ("trading_account_id", "Trading SubAccount ID"),
+            ("trading_account_id", "tradingAccountId"),
             ("tradingAccountKey", "Trading Key"),
             ("tradingAccountSecret", "Trading Secret"),
         ]
