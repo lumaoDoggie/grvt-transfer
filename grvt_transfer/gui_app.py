@@ -461,6 +461,32 @@ class App:
         self.btn_stop.configure(state=("normal" if running else "disabled"))
         self.lbl_state.configure(text=("状态: 运行中" if running else "状态: 未运行"))
 
+    def _set_stopping_ui(self) -> None:
+        self.btn_validate.configure(state="disabled")
+        self.btn_start.configure(state="disabled")
+        self.btn_stop.configure(state="disabled")
+        self.lbl_state.configure(text="状态: 停止中…")
+
+    def _poll_stop_complete(self, started_at: float) -> None:
+        r = self._runner
+        if not r:
+            self._set_running_ui(False)
+            return
+        if not r.running():
+            # Finalize/cleanup thread reference promptly.
+            try:
+                r.stop(timeout_sec=0)
+            except Exception:
+                pass
+            self.log.write("已停止。")
+            self._set_running_ui(False)
+            return
+        # Still running: keep polling without blocking the UI thread.
+        if time.time() - started_at > 30:
+            self.log.write("仍在停止中（可能在等待当前 API 调用超时/返回）…")
+            started_at = time.time()
+        self.root.after(300, lambda: self._poll_stop_complete(started_at))
+
     def on_validate(self):
         if self._runner and self._runner.running():
             messagebox.showwarning("提示", "正在运行中，无法验证。请先停止。")
@@ -543,10 +569,13 @@ class App:
     def on_stop(self):
         if not self._runner:
             return
-        self.log.write("正在停止…")
-        self._runner.stop()
-        self.log.write("已停止。")
-        self._set_running_ui(False)
+        self.log.write("正在停止（等待当前 API 调用结束）…")
+        self._set_stopping_ui()
+        try:
+            self._runner.request_stop()
+        except Exception:
+            pass
+        self.root.after(300, lambda: self._poll_stop_complete(time.time()))
 
 
 def main():

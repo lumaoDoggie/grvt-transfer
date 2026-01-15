@@ -55,12 +55,16 @@ class RebalanceRunner:
         self._thread = t
         return True
 
-    def stop(self, timeout_sec: float = 10.0) -> None:
+    def request_stop(self) -> None:
+        """Signal the loop to stop ASAP (non-blocking)."""
         self._stop_event.set()
         try:
             stop_bot()
         except Exception:
             pass
+
+    def stop(self, timeout_sec: float = 10.0) -> None:
+        self.request_stop()
         try:
             if self._thread is not None:
                 self._thread.join(timeout=float(timeout_sec))
