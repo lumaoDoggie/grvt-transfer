@@ -27,6 +27,7 @@ jobs:
       - name: Build exe (PyInstaller)
         run: |
           pyinstaller --noconfirm --clean --onefile --console --name grvt-transfer pyinstaller_entry.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name grvt-transfer-gui pyinstaller_gui_entry.py
 
       - name: Prepare release bundle
         shell: pwsh
@@ -37,6 +38,7 @@ jobs:
           New-Item -ItemType Directory -Force $bundleDir | Out-Null
 
           Copy-Item -Force "dist/grvt-transfer.exe" $bundleDir
+          Copy-Item -Force "dist/grvt-transfer-gui.exe" $bundleDir
           Copy-Item -Force ".env.example" $bundleDir
           Copy-Item -Force "log-config.yaml" $bundleDir
           Copy-Item -Force "README.md" $bundleDir

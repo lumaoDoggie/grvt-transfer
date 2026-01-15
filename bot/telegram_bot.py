@@ -68,6 +68,33 @@ def _state_path():
     state_dir = os.getenv("GRVT_STATE_DIR", "").strip() or "bot"
     return os.path.join(state_dir, "state.json")
 
+def _runtime_state_path():
+    state_dir = os.getenv("GRVT_STATE_DIR", "").strip() or "bot"
+    return os.path.join(state_dir, "runtime.json")
+
+
+def _read_runtime_state(max_age_sec: int = 6 * 60 * 60) -> dict:
+    """Best-effort: read runtime settings written by the runner (GUI/CLI)."""
+    try:
+        p = _runtime_state_path()
+        if not os.path.exists(p):
+            return {}
+        with open(p, "r", encoding="utf-8") as f:
+            d = json.load(f) or {}
+        if not isinstance(d, dict):
+            return {}
+        # Ignore stale data.
+        ts = d.get("ts")
+        if ts and (time.time() - float(ts)) > float(max_age_sec):
+            return {}
+        # Only apply when env matches (prod/test).
+        env = str(os.getenv("GRVT_ENV", "prod")).lower()
+        if str(d.get("env", env)).lower() != env:
+            return {}
+        return d
+    except Exception:
+        return {}
+
 
 def _get_chat_id():
     env_cid = os.getenv("TELEGRAM_CHAT_ID", "").strip()
@@ -191,6 +218,11 @@ def send_rebalance(event: dict):
     return send_message(text, reply_markup=kb)
 
 
+def _menu_keyboard():
+    # Persistent menu so users don't need to type commands like /view.
+    return {"keyboard": [[{"text": "查看"}]], "resize_keyboard": True}
+
+
 def send_warning(error):
     text = f"⚠️ 警告: API调用失败\n错误: {error}"
     return send_message(text)
@@ -277,6 +309,18 @@ def _get_margin_status():
 
             repo = ConfigRepository()
             base_cfg = repo.base()
+            runtime = _read_runtime_state()
+            if runtime:
+                # Keep account configs from repository; only override display thresholds.
+                if "triggerValue" in runtime and runtime.get("triggerValue") is not None:
+                    base_cfg["triggerValue"] = runtime.get("triggerValue")
+                ru = runtime.get("unwind")
+                if isinstance(ru, dict):
+                    if "unwind" not in base_cfg or not isinstance(base_cfg.get("unwind"), dict):
+                        base_cfg["unwind"] = {}
+                    for k in ("enabled", "triggerPct", "recoveryPct"):
+                        if k in ru and ru.get(k) is not None:
+                            base_cfg["unwind"][k] = ru.get(k)
             trigger = base_cfg.get("triggerValue", 2000)
             unwind_cfg = base_cfg.get("unwind", {})
             trigger_pct = unwind_cfg.get("triggerPct", 60)
@@ -333,7 +377,7 @@ def _get_margin_status():
                 text += (
                     f"\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
-                    f"紧急平仓触发: ≥{trigger_pct}% | 紧急平仓停止: <{recovery_pct}%"
+                    f"紧急减仓触发: ≥{trigger_pct}% | 紧急减仓停止: <{recovery_pct}%"
                 )
             return text
         except Exception as e:
@@ -380,10 +424,10 @@ def start_polling():
                     _save_chat_id(cid)
                 txt = str(m.get("text", ""))
                 if txt.strip() == "/start":
-                    send_message("ok", chat_id=cid)
-                elif txt.strip().lower() in ("/view", "view"):
+                    send_message("ok", chat_id=cid, reply_markup=_menu_keyboard())
+                elif txt.strip().lower() in ("/view", "view", "查看"):
                     status = _get_margin_status()
-                    ok, _ = send_message(status, chat_id=cid)
+                    ok, _ = send_message(status, chat_id=cid, reply_markup=_menu_keyboard())
                     try:
                         logging.getLogger("alerts").info(json.dumps({"text_cmd": "view", "sent": ok}))
                     except Exception:
@@ -399,7 +443,7 @@ def start_polling():
                     _save_chat_id(cid)
                 if data == "view_noop":
                     status = _get_margin_status()
-                    ok, res = send_message(status, chat_id=cid)
+                    ok, res = send_message(status, chat_id=cid, reply_markup=_menu_keyboard())
                     try:
                         logging.getLogger("alerts").info(json.dumps({"callback": "view_noop", "sent": ok}))
                     except Exception:

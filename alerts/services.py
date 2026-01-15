@@ -95,7 +95,7 @@ class AlertService:
                 trigger2 = "⚠️" if event.get('trigger2') else "✅"
 
                 text = (
-                    f"🚨 {dry_run_tag}触发紧急平仓\n"
+                    f"🚨 {dry_run_tag}触发紧急减仓\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
                     f"{trigger1} 账户A: {pct1} 保证金使用率\n"
                     f"{trigger2} 账户B: {pct2} 保证金使用率\n"
@@ -141,7 +141,7 @@ class AlertService:
 
                 status = "✅" if failed == 0 else "⚠️"
                 text = (
-                    f"{status} {dry_run_tag}紧急平仓完成\n"
+                    f"{status} {dry_run_tag}紧急减仓完成\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
                     f"订单: {successful}✓ {failed}✗\n"
                     f"\n"
@@ -191,7 +191,7 @@ class AlertService:
                 size = event.get('size')
                 error = str(event.get('error', 'unknown'))[:80]
                 size_line = f"\nsize={str(size)[:32]}" if size else ""
-                text = f"❌ 紧急平仓失败: {account} {instrument}{size_line}\n{error}"
+                text = f"❌ 紧急减仓失败: {account} {instrument}{size_line}\n{error}"
                 send_message(text)
             except Exception:
                 pass

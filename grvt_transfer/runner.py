@@ -1,7 +1,9 @@
 import json
 import logging
 import os
+from pathlib import Path
 import threading
+import time
 from decimal import Decimal
 
 from rebalance.services import RebalanceService
@@ -71,6 +73,7 @@ class RebalanceRunner:
         except Exception:
             pass
         self._thread = None
+        self._clear_runtime_settings()
 
     def _run(self) -> None:
         os.environ["GRVT_ENV"] = self._cfg_repo.env()
@@ -81,6 +84,9 @@ class RebalanceRunner:
 
         logger = setup_logger(base)
         noop_logger = setup_noop_logger(base)
+
+        # Publish active (non-secret) runtime settings so Telegram "查看" matches GUI-run values.
+        self._write_runtime_settings(base)
 
         bot_status = start_bot_daemon()
         try:
@@ -118,5 +124,42 @@ class RebalanceRunner:
 
         try:
             stop_bot()
+        except Exception:
+            pass
+
+        self._clear_runtime_settings()
+
+    @staticmethod
+    def _runtime_state_path() -> Path:
+        state_dir = (os.getenv("GRVT_STATE_DIR", "").strip() or "bot")
+        return Path(state_dir) / "runtime.json"
+
+    def _write_runtime_settings(self, base_cfg: dict) -> None:
+        try:
+            p = self._runtime_state_path()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            unwind = (base_cfg or {}).get("unwind") if isinstance(base_cfg, dict) else {}
+            unwind = unwind if isinstance(unwind, dict) else {}
+            payload = {
+                "ts": time.time(),
+                "env": self._cfg_repo.env(),
+                "triggerValue": (base_cfg or {}).get("triggerValue"),
+                "unwind": {
+                    "enabled": unwind.get("enabled"),
+                    "triggerPct": unwind.get("triggerPct"),
+                    "recoveryPct": unwind.get("recoveryPct"),
+                },
+            }
+            tmp = p.with_suffix(".tmp")
+            tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.replace(p)
+        except Exception:
+            pass
+
+    def _clear_runtime_settings(self) -> None:
+        try:
+            p = self._runtime_state_path()
+            if p.exists():
+                p.unlink()
         except Exception:
             pass

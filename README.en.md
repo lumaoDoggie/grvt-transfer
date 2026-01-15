@@ -25,6 +25,8 @@ GRVT sites:
 - Flow: fill credentials → click `验证` (sends a Telegram test message) → click `开始/停止`
 - Settings file: `%APPDATA%\\grvt-transfer\\settings.json` (contains secrets)
 
+Release zip: double-click `grvt-transfer-gui.exe` (or `scripts\\windows\\Start-GUI.bat`).
+
 ## Quick start (Windows PC, no Python needed)
 1) Download `grvt-transfer-windows.zip` from GitHub Releases and unzip it.
 2) Create `.env` from `.env.example`, then edit it:

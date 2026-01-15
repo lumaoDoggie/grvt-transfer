@@ -277,14 +277,17 @@ class App:
         frm_btn.pack(fill="x", padx=5, pady=8)
 
         self.btn_validate = ttk.Button(frm_btn, text="验证", command=self.on_validate)
-        self.btn_start = ttk.Button(frm_btn, text="开始", command=self.on_start, state="disabled")
+        # Start should be allowed even if the user skips validation.
+        self.btn_start = ttk.Button(frm_btn, text="开始", command=self.on_start, state="normal")
         self.btn_stop = ttk.Button(frm_btn, text="停止", command=self.on_stop, state="disabled")
+        self.btn_clear = ttk.Button(frm_btn, text="清空", command=self.on_clear)
         self.btn_validate.pack(side="left", padx=5)
         self.btn_start.pack(side="left", padx=5)
         self.btn_stop.pack(side="left", padx=5)
 
         self.lbl_state = ttk.Label(frm_btn, text="状态: 未运行")
         self.lbl_state.pack(side="right", padx=5)
+        self.btn_clear.pack(side="right", padx=5)
 
         frm_log = ttk.LabelFrame(self.tab_main, text="日志 / 验证结果")
         frm_log.pack(fill="both", expand=True, padx=5, pady=5)
@@ -467,7 +470,8 @@ class App:
 
     def _set_running_ui(self, running: bool) -> None:
         self.btn_validate.configure(state=("disabled" if running else "normal"))
-        self.btn_start.configure(state=("disabled" if running else ("normal" if self._validated_ok else "disabled")))
+        # Start is allowed without validation; validation just reduces surprises.
+        self.btn_start.configure(state=("disabled" if running else "normal"))
         self.btn_stop.configure(state=("normal" if running else "disabled"))
         self.lbl_state.configure(text=("状态: 运行中" if running else "状态: 未运行"))
         self._set_adv_enabled(not running, reason=("运行中：参数已锁定，停止后可修改" if running else ""))
@@ -530,29 +534,52 @@ class App:
 
         def work():
             ok_all = True
-            try:
-                ok, msg = _validate_telegram(gs.telegram_token, gs.telegram_chat_id)
-                self.log.write(msg)
-                ok_all = ok_all and ok
-            except Exception as e:
-                self.log.write(f"Telegram: 验证异常: {e}")
-                ok_all = False
+            # Validate Telegram + two accounts in parallel to reduce total wait time.
+            results: dict[str, bool] = {"TG": True, "A": False, "B": False}
 
-            try:
-                ok, msg = _validate_grvt_account("账户A", gs.account_a or {})
-                self.log.write(msg)
-                ok_all = ok_all and ok
-            except Exception as e:
-                self.log.write(f"账户A: 验证异常: {e}")
-                ok_all = False
+            def _vtg():
+                token = str(gs.telegram_token or "").strip()
+                chat_id = str(gs.telegram_chat_id or "").strip()
+                if not token and not chat_id:
+                    self.log.write("Telegram: 未填写，跳过验证（可选）")
+                    results["TG"] = True
+                    return
+                try:
+                    ok, msg = _validate_telegram(token, chat_id)
+                    self.log.write(msg)
+                    results["TG"] = bool(ok)
+                except Exception as e:
+                    self.log.write(f"Telegram: 验证异常: {e}")
+                    results["TG"] = False
 
-            try:
-                ok, msg = _validate_grvt_account("账户B", gs.account_b or {})
-                self.log.write(msg)
-                ok_all = ok_all and ok
-            except Exception as e:
-                self.log.write(f"账户B: 验证异常: {e}")
-                ok_all = False
+            def _va():
+                try:
+                    ok, msg = _validate_grvt_account("账户A", gs.account_a or {})
+                    self.log.write(msg)
+                    results["A"] = bool(ok)
+                except Exception as e:
+                    self.log.write(f"账户A: 验证异常: {e}")
+                    results["A"] = False
+
+            def _vb():
+                try:
+                    ok, msg = _validate_grvt_account("账户B", gs.account_b or {})
+                    self.log.write(msg)
+                    results["B"] = bool(ok)
+                except Exception as e:
+                    self.log.write(f"账户B: 验证异常: {e}")
+                    results["B"] = False
+
+            ta = threading.Thread(target=_va, daemon=True)
+            tb = threading.Thread(target=_vb, daemon=True)
+            ttg = threading.Thread(target=_vtg, daemon=True)
+            ttg.start()
+            ta.start()
+            tb.start()
+            ttg.join()
+            ta.join()
+            tb.join()
+            ok_all = ok_all and results["TG"] and results["A"] and results["B"]
 
             self.root.after(0, lambda: self._on_validate_done(ok_all))
 
@@ -562,20 +589,46 @@ class App:
         self._validated_ok = bool(ok_all)
         if ok_all:
             self.log.write("全部验证通过。可以点击【开始】。")
-            self.btn_start.configure(state="normal")
         else:
             self.log.write("验证失败：请修正配置后重试。")
-            self.btn_start.configure(state="disabled")
+        # Start is allowed regardless of validation outcome (it will ask for confirmation).
+        self.btn_start.configure(state="normal")
 
     def on_start(self):
-        if not self._validated_ok:
-            messagebox.showwarning("提示", "请先点击【验证】并确保全部通过。")
-            return
         if self._runner and self._runner.running():
             return
 
         gs = self._gather_from_ui()
         self._persist(gs)
+
+        # Basic sanity: account credentials are required to run. Telegram is optional.
+        def _missing_required(acc: dict) -> list[str]:
+            required = [
+                "account_id",
+                "funding_account_address",
+                "fundingAccountKey",
+                "fundingAccountSecret",
+                "trading_account_id",
+                "tradingAccountKey",
+                "tradingAccountSecret",
+            ]
+            return [k for k in required if not str((acc or {}).get(k, "")).strip()]
+
+        miss_a = _missing_required(gs.account_a or {})
+        miss_b = _missing_required(gs.account_b or {})
+        if miss_a or miss_b:
+            parts = []
+            if miss_a:
+                parts.append("账户A: " + ", ".join(miss_a))
+            if miss_b:
+                parts.append("账户B: " + ", ".join(miss_b))
+            messagebox.showerror("缺少必填项", "请先填写账户凭证：\n" + "\n".join(parts))
+            return
+
+        if not self._validated_ok:
+            ok = messagebox.askyesno("未验证", "尚未验证凭证（推荐先点【验证】）。仍然开始运行吗？")
+            if not ok:
+                return
 
         os.environ["TELEGRAM_BOT_TOKEN"] = gs.telegram_token
         os.environ["TELEGRAM_CHAT_ID"] = gs.telegram_chat_id
@@ -600,6 +653,29 @@ class App:
         except Exception:
             pass
         self.root.after(300, lambda: self._poll_stop_complete(time.time()))
+
+    def on_clear(self):
+        if self._runner and self._runner.running():
+            messagebox.showwarning("提示", "运行中无法清空，请先停止。")
+            return
+        ok = messagebox.askyesno("确认清空", "确定要清空当前界面填写的内容吗？（不会立即覆盖本地保存）")
+        if not ok:
+            return
+
+        # Clear credentials
+        self.v_tg_token.set("")
+        self.v_tg_chat.set("")
+        for k, _ in self.acc_fields:
+            self.v_a[k].set("")
+            self.v_b[k].set("")
+
+        # Reset advanced values to env defaults.
+        env = "prod" if (self.v_env_label.get() == "生产") else "test"
+        defaults = _env_defaults(env) or {}
+        self.settings.base_cfg = dict(defaults)
+        self._validated_ok = False
+        self._load_into_ui()
+        self.log.write("已清空（未保存）。")
 
 
 def main():
