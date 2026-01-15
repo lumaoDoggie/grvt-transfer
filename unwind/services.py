@@ -179,8 +179,8 @@ class UnwindService:
 
     def calc_hedged_unwind_size(self, eq1: Decimal, mm1: Decimal, eq2: Decimal, mm2: Decimal,
                                  pos1_size: Decimal, pos2_size: Decimal, recovery_pct: Decimal) -> Decimal:
-        """Calculate unwind size to reach recovery within ~10 iterations."""
-        iterations = Decimal("10")
+        """Calculate unwind size to reach recovery within ~5 iterations."""
+        iterations = Decimal("5")
         pct1 = (mm1 / eq1) * Decimal("100") if eq1 > 0 else Decimal("0")
         pct2 = (mm2 / eq2) * Decimal("100") if eq2 > 0 else Decimal("0")
         max_pct = max(pct1, pct2)
@@ -735,7 +735,7 @@ class UnwindService:
 
             # Unwind all matched (hedged) instruments, with order sizes proportional to current position sizes.
             # A single dynamic ratio is computed from margin stress and then applied to each position size.
-            target_iters = min(max_iterations, 10) if max_iterations > 0 else 10
+            target_iters = min(max_iterations, 5) if max_iterations > 0 else 5
             computed_ratio = self.calc_unwind_ratio(eq1, mm1, eq2, mm2, recovery_pct, target_iters)
             max_ratio = (unwind_pct / Decimal("100")) if unwind_pct > Decimal("0") else Decimal("1")
             unwind_ratio = min(computed_ratio, max_ratio)
