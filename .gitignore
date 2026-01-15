@@ -18,6 +18,7 @@ logs/
 bot/.botlock
 alerts/state.json
 bot/state.json
+bot/runtime.json
 bot/config.local.yaml
 config/**/*.local.yaml
 config/**/*.local.yml
