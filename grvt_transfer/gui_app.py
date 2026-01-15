@@ -299,7 +299,7 @@ class App:
         self.v_unwind_min_notional = StringVar()
 
         ttk.Checkbutton(frm_unwind, text="启用", variable=self.v_unwind_enabled).grid(row=0, column=0, sticky="w", padx=5, pady=5)
-        ttk.Checkbutton(frm_unwind, text="dryRun（只演练不下单）", variable=self.v_unwind_dryrun).grid(row=0, column=1, sticky="w", padx=5, pady=5)
+        ttk.Checkbutton(frm_unwind, text="dryRun（只告警,不实际减仓）", variable=self.v_unwind_dryrun).grid(row=0, column=1, sticky="w", padx=5, pady=5)
 
         row = 1
         for label, var in [
