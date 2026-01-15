@@ -20,6 +20,11 @@ GRVT sites:
 - Never commit secrets (`.env*` is ignored; use `.env.example` as a template).
 - Telegram commands are **locked down**: if `TELEGRAM_CHAT_ID` is set, all other chats are ignored.
 
+## Windows GUI (prod only)
+- Run: `grvt-transfer gui` (or `python -m grvt_transfer gui`)
+- Flow: fill credentials → click `验证` (sends a Telegram test message) → click `开始/停止`
+- Settings file: `%APPDATA%\\grvt-transfer\\settings.json` (contains secrets)
+
 ## Quick start (Windows PC, no Python needed)
 1) Download `grvt-transfer-windows.zip` from GitHub Releases and unzip it.
 2) Create `.env` from `.env.example`, then edit it:

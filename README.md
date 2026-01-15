@@ -29,6 +29,15 @@ GRVT 站点：
 ## Windows 一键运行（推荐：不需要安装 Python）
 ### 如果在你自己机器跑也OK, 但是务必保证网络稳定. (grvt api调用不用翻墙, tg通知需要)
 
+### Windows GUI（推荐：不用进文件夹改配置）
+GUI 提供：`验证`（Telegram + 两个账户）、`开始/停止` 一键运行，默认使用生产环境（prod）。
+
+- 运行（源码方式）：`python -m grvt_transfer gui` 或 `grvt-transfer gui`
+- 配置保存位置：`%APPDATA%\\grvt-transfer\\settings.json`（包含密钥，请自行注意电脑安全）
+- 使用流程：填入凭证 → 点击 `验证`（会给你的 Telegram 发一条测试消息）→ 点击 `开始`
+
+命令行运行依然保留：`grvt-transfer run`
+
 1) 从 GitHub Releases 下载 `grvt-transfer-windows.zip` 并解压。
 2) 文件夹里复制 `.env.example`,改名为 `.env`，然后编辑 `.env`：
    - `GRVT_ENV=prod` 

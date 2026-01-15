@@ -416,6 +416,8 @@ _started = False
 _lock_pid = None
 _stop_event = threading.Event()
 _polling_thread = None
+_watchdog_thread = None
+_watchdog_stop_event = threading.Event()
 
 
 def _start_polling_thread():
@@ -434,9 +436,11 @@ def _watchdog():
     stale_threshold = 60  # seconds without heartbeat update = stale
     check_interval = 30  # check every 30 seconds
 
-    while True:
+    while not _watchdog_stop_event.is_set():
         try:
-            time.sleep(check_interval)
+            # Allow stop_bot() to terminate the watchdog promptly.
+            if _watchdog_stop_event.wait(check_interval):
+                break
 
             # Check if polling thread is alive
             if _polling_thread is None or not _polling_thread.is_alive():
@@ -465,7 +469,7 @@ def _watchdog():
                 logging.getLogger("errors").info(json.dumps({"error": "watchdog_error", "exception": str(e)}, default=str))
             except Exception:
                 pass
-            time.sleep(5)  # backoff on error
+            _watchdog_stop_event.wait(5)  # backoff on error
 
 
 def _lock_path():
@@ -507,6 +511,10 @@ def _release_lock():
 
 def start_bot_daemon():
     global _started
+    global _watchdog_thread
+    # Allow restarting within the same process after stop_bot().
+    if _started and _stop_event.is_set():
+        _started = False
     if _started:
         try:
             logging.getLogger("alerts").info(json.dumps({"bot_started": False, "reason": "already_started"}))
@@ -537,8 +545,10 @@ def start_bot_daemon():
     # Start the polling thread using the new helper
     _start_polling_thread()
     # Start watchdog thread to monitor and restart polling if needed
+    _watchdog_stop_event.clear()
     watchdog_thread = threading.Thread(target=_watchdog, daemon=True)
     watchdog_thread.start()
+    _watchdog_thread = watchdog_thread
     _started = True
     try:
         logging.getLogger("alerts").info(json.dumps({"bot_started": True, "watchdog_enabled": True, "chat_id": _get_chat_id()}))
@@ -549,9 +559,27 @@ def start_bot_daemon():
 
 
 def stop_bot():
+    global _started
+    global _polling_thread
+    global _watchdog_thread
     try:
+        _watchdog_stop_event.set()
         _stop_event.set()
         logging.getLogger("alerts").info(json.dumps({"bot_stopped": True}))
     except Exception:
         pass
+    # Best-effort: allow start/stop cycles (GUI use case).
+    try:
+        if _polling_thread is not None and _polling_thread.is_alive():
+            _polling_thread.join(timeout=5)
+    except Exception:
+        pass
+    try:
+        if _watchdog_thread is not None and _watchdog_thread.is_alive():
+            _watchdog_thread.join(timeout=5)
+    except Exception:
+        pass
+    _polling_thread = None
+    _watchdog_thread = None
+    _started = False
     _release_lock()
