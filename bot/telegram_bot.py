@@ -300,6 +300,56 @@ def _last_noop_line():
 
 def _get_margin_status():
     """Fetch live margin percentages and status for both accounts."""
+    def _format_status(
+        now_str: str,
+        trigger: float,
+        trigger_pct: float,
+        recovery_pct: float,
+        show_unwind_thresholds: bool,
+        eq_a: Decimal,
+        mm_a: Decimal,
+        avail_a: Decimal,
+        eq_b: Decimal,
+        mm_b: Decimal,
+        avail_b: Decimal,
+    ) -> str:
+        def calc_pct(eq, mm):
+            if eq <= 0:
+                return "N/A"
+            if mm <= 0:
+                return "0.0%"
+            pct = (mm / eq) * Decimal("100")
+            return f"{pct:.1f}%"
+
+        def avail_pct(eq, avail):
+            if eq <= 0:
+                return "N/A"
+            return f"{(avail / eq) * Decimal('100'):.1f}%"
+
+        pct_a = calc_pct(eq_a, mm_a)
+        pct_b = calc_pct(eq_b, mm_b)
+        delta = eq_a - eq_b
+        total_eq = eq_a + eq_b
+
+        text = (
+            f"📊 上次检查时间 @ {now_str}\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"触发转账阈值: ${trigger:,.0f} | 账户差额: ${delta:,.0f}\n"
+            f"总余额: ${total_eq:,.0f}\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"账户A: {pct_a} 保证金使用率\n"
+            f"  余额=${eq_a:,.0f} | 可用金额={avail_pct(eq_a, avail_a)}\n"
+            f"账户B: {pct_b} 保证金使用率\n"
+            f"  余额=${eq_b:,.0f} | 可用金额={avail_pct(eq_b, avail_b)}"
+        )
+        if show_unwind_thresholds:
+            text += (
+                f"\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"紧急减仓触发: {trigger_pct:.0f}% | 紧急减仓停止: <{recovery_pct:.0f}%"
+            )
+        return text
+
     last_error = None
     for attempt in range(3):
         try:
@@ -325,7 +375,89 @@ def _get_margin_status():
             unwind_cfg = base_cfg.get("unwind", {})
             trigger_pct = unwind_cfg.get("triggerPct", 60)
             recovery_pct = unwind_cfg.get("recoveryPct", 40)
-            show_unwind_thresholds = bool(unwind_cfg.get("enabled", False)) and (not bool(unwind_cfg.get("dryRun", True)))
+            show_unwind_thresholds = bool(unwind_cfg.get("enabled", False))
+
+            # Prefer last known snapshot from the running loop (no API calls needed).
+            last_event = (runtime or {}).get("last_event") if isinstance(runtime, dict) else None
+            if isinstance(last_event, dict):
+                try:
+                    import state
+                    last_check = state.get_last_check_time()
+                    now_str = last_check if last_check else str(last_event.get("event_time_sh") or "")
+                    if not now_str.strip():
+                        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                    def _d(v):
+                        try:
+                            return Decimal(str(v))
+                        except Exception:
+                            return Decimal("0")
+
+                    if "trading_a" in last_event and "trading_b" in last_event:
+                        ta = last_event.get("trading_a") or {}
+                        tb = last_event.get("trading_b") or {}
+                        eq_a = _d(ta.get("equity"))
+                        eq_b = _d(tb.get("equity"))
+                        mm_a = _d(ta.get("mm"))
+                        mm_b = _d(tb.get("mm"))
+                        avail_a = _d(ta.get("available"))
+                        avail_b = _d(tb.get("available"))
+                    else:
+                        eq_a = _d(last_event.get("eq1"))
+                        eq_b = _d(last_event.get("eq2"))
+                        mm_a = _d(last_event.get("mm1"))
+                        mm_b = _d(last_event.get("mm2"))
+                        avail_a = _d(last_event.get("avail1"))
+                        avail_b = _d(last_event.get("avail2"))
+
+                    return _format_status(
+                        now_str=now_str,
+                        trigger=float(trigger),
+                        trigger_pct=float(trigger_pct),
+                        recovery_pct=float(recovery_pct),
+                        show_unwind_thresholds=show_unwind_thresholds,
+                        eq_a=eq_a,
+                        mm_a=mm_a,
+                        avail_a=avail_a,
+                        eq_b=eq_b,
+                        mm_b=mm_b,
+                        avail_b=avail_b,
+                    )
+                except Exception:
+                    pass
+
+            # Next best: parse last noop line (still no API calls).
+            try:
+                ln = _last_noop_line()
+                if ln:
+                    evt = json.loads(ln)
+                    if isinstance(evt, dict) and "eq1" in evt and "eq2" in evt:
+                        import state
+                        last_check = state.get_last_check_time()
+                        now_str = last_check if last_check else str(evt.get("event_time_sh") or "")
+                        if not now_str.strip():
+                            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        eq_a = Decimal(str(evt.get("eq1", "0")))
+                        eq_b = Decimal(str(evt.get("eq2", "0")))
+                        mm_a = Decimal(str(evt.get("mm1", "0")))
+                        mm_b = Decimal(str(evt.get("mm2", "0")))
+                        avail_a = Decimal(str(evt.get("avail1", "0")))
+                        avail_b = Decimal(str(evt.get("avail2", "0")))
+                        return _format_status(
+                            now_str=now_str,
+                            trigger=float(trigger),
+                            trigger_pct=float(trigger_pct),
+                            recovery_pct=float(recovery_pct),
+                            show_unwind_thresholds=show_unwind_thresholds,
+                            eq_a=eq_a,
+                            mm_a=mm_a,
+                            avail_a=avail_a,
+                            eq_b=eq_b,
+                            mm_b=mm_b,
+                            avail_b=avail_b,
+                        )
+            except Exception:
+                pass
 
             cfg_a, cfg_b = repo.accounts()
             client_a = ClientFactory.trading_client(cfg_a)
@@ -340,46 +472,22 @@ def _get_margin_status():
                     continue
                 return "API returned zero equity - try again"
 
-            def calc_pct(eq, mm):
-                if eq <= 0:
-                    return "N/A"
-                if mm <= 0:
-                    return "0.0%"
-                pct = (mm / eq) * Decimal("100")
-                return f"{pct:.1f}%"
-
-            def avail_pct(eq, avail):
-                if eq <= 0:
-                    return "N/A"
-                return f"{(avail / eq) * Decimal('100'):.1f}%"
-
-            pct_a = calc_pct(eq_a, mm_a)
-            pct_b = calc_pct(eq_b, mm_b)
-            delta = eq_a - eq_b
-            total_eq = eq_a + eq_b
-
             import state
             last_check = state.get_last_check_time()
             now_str = last_check if last_check else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-            text = (
-                f"📊 上次检查时间 @ {now_str}\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"触发转账阈值: ${trigger:,} | 账户差额: ${delta:,.0f}\n"
-                f"总余额: ${total_eq:,.0f}\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"账户A: {pct_a} 保证金使用率\n"
-                f"  余额=${eq_a:,.0f} | 可用金额={avail_pct(eq_a, avail_a)}\n"
-                f"账户B: {pct_b} 保证金使用率\n"
-                f"  余额=${eq_b:,.0f} | 可用金额={avail_pct(eq_b, avail_b)}"
+            return _format_status(
+                now_str=now_str,
+                trigger=float(trigger),
+                trigger_pct=float(trigger_pct),
+                recovery_pct=float(recovery_pct),
+                show_unwind_thresholds=show_unwind_thresholds,
+                eq_a=eq_a,
+                mm_a=mm_a,
+                avail_a=avail_a,
+                eq_b=eq_b,
+                mm_b=mm_b,
+                avail_b=avail_b,
             )
-            if show_unwind_thresholds:
-                text += (
-                    f"\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"紧急减仓触发: ≥{trigger_pct}% | 紧急减仓停止: <{recovery_pct}%"
-                )
-            return text
         except Exception as e:
             last_error = e
             if attempt < 2:

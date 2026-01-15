@@ -2,13 +2,45 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 
 
 class AlertService:
     @staticmethod
+    def _runtime_state_path() -> Path:
+        state_dir = (os.getenv("GRVT_STATE_DIR", "").strip() or "bot")
+        return Path(state_dir) / "runtime.json"
+
+    @staticmethod
+    def _update_runtime_state(patch: dict) -> None:
+        """Merge patch into bot/runtime.json (best-effort, non-secret data only)."""
+        try:
+            p = AlertService._runtime_state_path()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            cur = {}
+            try:
+                if p.exists():
+                    cur = json.loads(p.read_text(encoding="utf-8")) or {}
+            except Exception:
+                cur = {}
+            if not isinstance(cur, dict):
+                cur = {}
+            cur.update(patch or {})
+            cur["ts"] = time.time()
+            if "env" not in cur:
+                cur["env"] = str(os.getenv("GRVT_ENV", "prod")).lower()
+            tmp = p.with_suffix(".tmp")
+            tmp.write_text(json.dumps(cur, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.replace(p)
+        except Exception:
+            pass
+
+    @staticmethod
     def dispatch_rebalance_event(event: dict):
         logger = logging.getLogger("alerts")
         logger.info(json.dumps({"rebalance_event": event}, default=str))
+        # Keep a non-secret "last known status" snapshot for Telegram "查看".
+        AlertService._update_runtime_state({"last_event": event})
         try:
             from bot.telegram_bot import send_rebalance
             if ("transfer_usdt" in event) or ("success" in event):
