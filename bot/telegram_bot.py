@@ -213,7 +213,7 @@ def send_rebalance(event: dict):
     te = str(event.get("totalEquity"))
     aeq = str((event.get("trading_a") or {}).get("equity"))
     beq = str((event.get("trading_b") or {}).get("equity"))
-    text = f"💰 再平衡已触发\n时间: {t}\n状态: {s}\n转账金额: ${amt}\n总权益: ${te}\n账户A权益: ${aeq}\n账户B权益: ${beq}"
+    text = f"💰 再平衡已触发\n时间: {t}\n状态: {s}\n转账金额: ${amt}\n总余额: ${te}\n账户A余额: ${aeq}\n账户B余额: ${beq}"
     kb = {"inline_keyboard": [[{"text": "查看状态", "callback_data": "view_noop"}]]}
     return send_message(text, reply_markup=kb)
 
