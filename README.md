@@ -15,7 +15,6 @@ Language: 中文 | English: `README.en.md`
 
 GRVT 站点：
 - 生产（Prod）：`https://grvt.io`
-- 测试网（Testnet）：`https://testnet.grvt.io`
 
 ---
 
@@ -28,14 +27,14 @@ GRVT 站点：
 ---
 
 ## Windows 一键运行（推荐：不需要安装 Python）
-# 如果在你自己机器跑也OK, 但是务必保证网络稳定. (grvt api调用不用翻墙, tg通知需要)
+### 如果在你自己机器跑也OK, 但是务必保证网络稳定. (grvt api调用不用翻墙, tg通知需要)
 
 1) 从 GitHub Releases 下载 `grvt-transfer-windows.zip` 并解压。
 2) 文件夹里复制 `.env.example`,改名为 `.env`，然后编辑 `.env`：
-   - `GRVT_ENV=test` 或 `prod`
+   - `GRVT_ENV=prod` 
    - `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`
    - 两个账户的 API Key / Secret 等（按模板填写）
-3) 根据你的需求修改阈值：`config/test/*.yaml`（或 `config/prod/*.yaml`）。
+3) 根据你的需求修改阈值：`config/prod/config.yaml` (生产环境)。
 4) 双击 `scripts/windows/Start.bat` 启动。
 
 停止：双击 `scripts/windows/Stop.bat`。
