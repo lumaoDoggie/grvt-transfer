@@ -295,12 +295,18 @@ class App:
         frm_cfg = ttk.LabelFrame(self.tab_adv, text="运行参数")
         frm_cfg.pack(fill="x", padx=5, pady=5)
 
+        self.v_adv_note = StringVar(value="")
+        ttk.Label(frm_cfg, textvariable=self.v_adv_note).grid(row=0, column=0, columnspan=2, sticky="w", padx=5, pady=2)
+
         self.v_trigger = StringVar()
         self.v_interval = StringVar()
         self.v_sweep = StringVar()
         self.v_min_avail_pct = StringVar()
 
-        row = 0
+        # Track widgets that should be disabled while running.
+        self._adv_widgets: list = []
+
+        row = 1
         for label, var in [
             ("triggerValue (USDT)", self.v_trigger),
             ("rebalanceIntervalSec (秒)", self.v_interval),
@@ -308,7 +314,9 @@ class App:
             ("minAvailableBalanceAlertPercentage (%)", self.v_min_avail_pct),
         ]:
             ttk.Label(frm_cfg, text=label).grid(row=row, column=0, sticky="w", padx=5, pady=5)
-            ttk.Entry(frm_cfg, textvariable=var, width=30).grid(row=row, column=1, sticky="w", padx=5, pady=5)
+            e = ttk.Entry(frm_cfg, textvariable=var, width=30)
+            e.grid(row=row, column=1, sticky="w", padx=5, pady=5)
+            self._adv_widgets.append(e)
             row += 1
 
         frm_unwind = ttk.LabelFrame(self.tab_adv, text="紧急减仓（unwind）")
@@ -322,8 +330,11 @@ class App:
         self.v_unwind_wait = StringVar()
         self.v_unwind_min_notional = StringVar()
 
-        ttk.Checkbutton(frm_unwind, text="启用", variable=self.v_unwind_enabled).grid(row=0, column=0, sticky="w", padx=5, pady=5)
-        ttk.Checkbutton(frm_unwind, text="dryRun（只告警,不实际减仓）", variable=self.v_unwind_dryrun).grid(row=0, column=1, sticky="w", padx=5, pady=5)
+        cb_enabled = ttk.Checkbutton(frm_unwind, text="启用", variable=self.v_unwind_enabled)
+        cb_dry = ttk.Checkbutton(frm_unwind, text="dryRun（只告警,不实际减仓）", variable=self.v_unwind_dryrun)
+        cb_enabled.grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        cb_dry.grid(row=0, column=1, sticky="w", padx=5, pady=5)
+        self._adv_widgets.extend([cb_enabled, cb_dry])
 
         row = 1
         for label, var in [
@@ -334,7 +345,9 @@ class App:
             ("minPositionNotional (USDT)", self.v_unwind_min_notional),
         ]:
             ttk.Label(frm_unwind, text=label).grid(row=row, column=0, sticky="w", padx=5, pady=5)
-            ttk.Entry(frm_unwind, textvariable=var, width=30).grid(row=row, column=1, sticky="w", padx=5, pady=5)
+            e = ttk.Entry(frm_unwind, textvariable=var, width=30)
+            e.grid(row=row, column=1, sticky="w", padx=5, pady=5)
+            self._adv_widgets.append(e)
             row += 1
 
     def _build_account_form(self, parent, vars_map: dict):
@@ -460,12 +473,26 @@ class App:
         self.btn_start.configure(state=("disabled" if running else ("normal" if self._validated_ok else "disabled")))
         self.btn_stop.configure(state=("normal" if running else "disabled"))
         self.lbl_state.configure(text=("状态: 运行中" if running else "状态: 未运行"))
+        self._set_adv_enabled(not running, reason=("运行中：参数已锁定，停止后可修改" if running else ""))
+        # Prevent switching env while running (also enforced in handler).
+        self.cmb_env.configure(state=("disabled" if running else "readonly"))
 
     def _set_stopping_ui(self) -> None:
         self.btn_validate.configure(state="disabled")
         self.btn_start.configure(state="disabled")
         self.btn_stop.configure(state="disabled")
         self.lbl_state.configure(text="状态: 停止中…")
+        self._set_adv_enabled(False, reason="停止中：参数已锁定，等待当前调用结束…")
+        self.cmb_env.configure(state="disabled")
+
+    def _set_adv_enabled(self, enabled: bool, reason: str = "") -> None:
+        self.v_adv_note.set(reason or "")
+        state = "normal" if enabled else "disabled"
+        for w in getattr(self, "_adv_widgets", []) or []:
+            try:
+                w.configure(state=state)
+            except Exception:
+                pass
 
     def _poll_stop_complete(self, started_at: float) -> None:
         r = self._runner
