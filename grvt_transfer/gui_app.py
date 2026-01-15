@@ -232,7 +232,7 @@ class App:
         nb.add(self.tab_adv, text="高级")
 
         # ---- Main tab
-        frm_tg = ttk.LabelFrame(self.tab_main, text="Telegram")
+        frm_tg = ttk.LabelFrame(self.tab_main, text="Telegram（可选）")
         frm_tg.pack(fill="x", padx=5, pady=5)
 
         frm_env = ttk.LabelFrame(self.tab_main, text="环境")
