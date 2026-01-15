@@ -268,7 +268,7 @@ class App:
         self.log = TkLog(self.txt_log)
 
         # ---- Advanced tab
-        frm_cfg = ttk.LabelFrame(self.tab_adv, text="运行参数（默认来自 config/prod/config.yaml）")
+        frm_cfg = ttk.LabelFrame(self.tab_adv, text="运行参数")
         frm_cfg.pack(fill="x", padx=5, pady=5)
 
         self.v_trigger = StringVar()
