@@ -658,24 +658,35 @@ class App:
         if self._runner and self._runner.running():
             messagebox.showwarning("提示", "运行中无法清空，请先停止。")
             return
-        ok = messagebox.askyesno("确认清空", "确定要清空当前界面填写的内容吗？（不会立即覆盖本地保存）")
+        ok = messagebox.askyesno("确认清空", "确定要清空当前界面填写的内容吗？（会同时清空本地保存）")
         if not ok:
             return
 
-        # Clear credentials
-        self.v_tg_token.set("")
-        self.v_tg_chat.set("")
-        for k, _ in self.acc_fields:
-            self.v_a[k].set("")
-            self.v_b[k].set("")
-
-        # Reset advanced values to env defaults.
         env = "prod" if (self.v_env_label.get() == "生产") else "test"
         defaults = _env_defaults(env) or {}
-        self.settings.base_cfg = dict(defaults)
+
+        # Reset in-memory settings so _load_into_ui() doesn't re-populate old values.
+        self.settings = GuiSettings(
+            env=env,
+            telegram_token="",
+            telegram_chat_id="",
+            account_a={},
+            account_b={},
+            base_cfg=dict(defaults),
+        )
         self._validated_ok = False
         self._load_into_ui()
-        self.log.write("已清空（未保存）。")
+
+        # Also clear persisted settings for BOTH envs to avoid surprises on next launch.
+        try:
+            prod_defaults = _env_defaults("prod") or {}
+            test_defaults = _env_defaults("test") or {}
+            blank_prod = {"telegram_token": "", "telegram_chat_id": "", "account_a": {}, "account_b": {}, "base_cfg": dict(prod_defaults)}
+            blank_test = {"telegram_token": "", "telegram_chat_id": "", "account_a": {}, "account_b": {}, "base_cfg": dict(test_defaults)}
+            _write_settings({"selected_env": env, "envs": {"prod": blank_prod, "test": blank_test}})
+        except Exception:
+            pass
+        self.log.write("已清空并保存。")
 
 
 def main():

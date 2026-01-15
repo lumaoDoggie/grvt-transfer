@@ -26,8 +26,8 @@ jobs:
 
       - name: Build exe (PyInstaller)
         run: |
-          pyinstaller --noconfirm --clean --onefile --console --name grvt-transfer pyinstaller_entry.py
-          pyinstaller --noconfirm --clean --onefile --windowed --name grvt-transfer-gui pyinstaller_gui_entry.py
+          pyinstaller --noconfirm --clean --onefile --console --name grvt-transfer-cli pyinstaller_entry.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name grvt-transfer pyinstaller_gui_entry.py
 
       - name: Prepare release bundle
         shell: pwsh
@@ -37,8 +37,10 @@ jobs:
           if (Test-Path $bundleDir) { Remove-Item -Recurse -Force $bundleDir }
           New-Item -ItemType Directory -Force $bundleDir | Out-Null
 
+          # Only one .exe in the bundle root to avoid confusion: GUI is the default entrypoint.
           Copy-Item -Force "dist/grvt-transfer.exe" $bundleDir
-          Copy-Item -Force "dist/grvt-transfer-gui.exe" $bundleDir
+          New-Item -ItemType Directory -Force "$bundleDir/bin" | Out-Null
+          Copy-Item -Force "dist/grvt-transfer-cli.exe" "$bundleDir/bin/grvt-transfer-cli.exe"
           Copy-Item -Force ".env.example" $bundleDir
           Copy-Item -Force "log-config.yaml" $bundleDir
           Copy-Item -Force "README.md" $bundleDir
