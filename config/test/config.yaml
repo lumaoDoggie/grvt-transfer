@@ -10,7 +10,7 @@ environment: test
 triggerValue: 2000
 
 # 主循环间隔（秒）
-rebalanceIntervalSec: 30
+rebalanceIntervalSec: 10
 
 # 只执行一次后退出（用于手动测试/排障）
 rebalanceOnce: false
