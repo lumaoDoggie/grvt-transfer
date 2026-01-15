@@ -74,20 +74,44 @@ def _write_settings(data: dict) -> None:
 def _telegram_get_json(url: str) -> dict:
     # Avoid adding requests dependency; stdlib only.
     from urllib.request import urlopen
+    from urllib.error import HTTPError
     import json as _json
 
-    with urlopen(url, timeout=25) as resp:
-        return _json.loads(resp.read().decode("utf-8"))
+    try:
+        with urlopen(url, timeout=25) as resp:
+            return _json.loads(resp.read().decode("utf-8"))
+    except HTTPError as e:
+        try:
+            body = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            body = ""
+        try:
+            obj = _json.loads(body) if body else {}
+        except Exception:
+            obj = {"raw": body}
+        return {"ok": False, "http_status": int(getattr(e, "code", 0) or 0), "error": str(e), "body": obj}
 
 
 def _telegram_post_json(url: str, payload: dict) -> dict:
     from urllib.request import Request, urlopen
+    from urllib.error import HTTPError
     import json as _json
 
     data = _json.dumps(payload).encode("utf-8")
     req = Request(url, data=data, headers={"Content-Type": "application/json"})
-    with urlopen(req, timeout=25) as resp:
-        return _json.loads(resp.read().decode("utf-8"))
+    try:
+        with urlopen(req, timeout=25) as resp:
+            return _json.loads(resp.read().decode("utf-8"))
+    except HTTPError as e:
+        try:
+            body = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            body = ""
+        try:
+            obj = _json.loads(body) if body else {}
+        except Exception:
+            obj = {"raw": body}
+        return {"ok": False, "http_status": int(getattr(e, "code", 0) or 0), "error": str(e), "body": obj}
 
 
 def _validate_telegram(token: str, chat_id: str) -> tuple[bool, str]:
@@ -98,7 +122,10 @@ def _validate_telegram(token: str, chat_id: str) -> tuple[bool, str]:
 
     me = _telegram_get_json(f"https://api.telegram.org/bot{token}/getMe")
     if not me.get("ok"):
-        return False, f"Telegram: getMe 失败: {me}"
+        return False, (
+            "Telegram: getMe 失败。可能原因：token 错误/网络无法访问 api.telegram.org。\n"
+            f"detail={me}"
+        )
 
     text = f"grvt-transfer 验证成功 @ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
     res = _telegram_post_json(
@@ -106,7 +133,10 @@ def _validate_telegram(token: str, chat_id: str) -> tuple[bool, str]:
         {"chat_id": chat_id, "text": text},
     )
     if not res.get("ok"):
-        return False, f"Telegram: sendMessage 失败: {res}"
+        return False, (
+            "Telegram: sendMessage 失败。常见原因：chat_id 不对 / 你还没在 Telegram 里点过该机器人并 /start。\n"
+            f"detail={res}"
+        )
     return True, "Telegram: 验证通过（已发送测试消息）"
 
 
@@ -132,24 +162,38 @@ def _validate_grvt_account(name: str, cfg: dict) -> tuple[bool, str]:
     except Exception as e:
         return False, f"{name}: 私钥格式不合法: {e}"
 
-    # Trading summary (auth + subaccount id correctness).
-    try:
-        client_t = ClientFactory.trading_client(cfg)
-        sub_id = str(cfg.get("trading_account_id"))
-        res_t = client_t.sub_account_summary_v1(rt.ApiSubAccountSummaryRequest(sub_account_id=sub_id))
-        if isinstance(res_t, GrvtError):
-            return False, f"{name}: Trading summary 失败: {res_t}"
-    except Exception as e:
-        return False, f"{name}: Trading summary 异常: {e}"
+    import dataclasses
 
-    # Funding summary (auth correctness).
-    try:
-        client_f = ClientFactory.funding_client(cfg)
-        res_f = client_f.funding_account_summary_v1(types.EmptyRequest())
-        if isinstance(res_f, GrvtError):
-            return False, f"{name}: Funding summary 失败: {res_f}"
-    except Exception as e:
-        return False, f"{name}: Funding summary 异常: {e}"
+    # Trading summary (auth + subaccount id correctness). Retry on transient network errors.
+    client_t = ClientFactory.trading_client(cfg)
+    sub_id = str(cfg.get("trading_account_id"))
+    last_exc = None
+    for attempt in range(3):
+        try:
+            res_t = client_t.sub_account_summary_v1(rt.ApiSubAccountSummaryRequest(sub_account_id=sub_id))
+            if isinstance(res_t, GrvtError):
+                return False, f"{name}: Trading summary 失败: {dataclasses.asdict(res_t)}"
+            break
+        except Exception as e:
+            last_exc = e
+            time.sleep(1 + attempt)
+    else:
+        return False, f"{name}: Trading summary 异常: {last_exc}"
+
+    # Funding summary (auth correctness). Retry on transient network errors.
+    client_f = ClientFactory.funding_client(cfg)
+    last_exc = None
+    for attempt in range(3):
+        try:
+            res_f = client_f.funding_account_summary_v1(types.EmptyRequest())
+            if isinstance(res_f, GrvtError):
+                return False, f"{name}: Funding summary 失败: {dataclasses.asdict(res_f)}"
+            break
+        except Exception as e:
+            last_exc = e
+            time.sleep(1 + attempt)
+    else:
+        return False, f"{name}: Funding summary 异常: {last_exc}"
 
     return True, f"{name}: 验证通过"
 
@@ -280,7 +324,7 @@ class App:
         # Start should be allowed even if the user skips validation.
         self.btn_start = ttk.Button(frm_btn, text="开始", command=self.on_start, state="normal")
         self.btn_stop = ttk.Button(frm_btn, text="停止", command=self.on_stop, state="disabled")
-        self.btn_clear = ttk.Button(frm_btn, text="清空", command=self.on_clear)
+        self.btn_clear = ttk.Button(frm_btn, text="删除配置", command=self.on_clear)
         self.btn_validate.pack(side="left", padx=5)
         self.btn_start.pack(side="left", padx=5)
         self.btn_stop.pack(side="left", padx=5)
@@ -540,8 +584,8 @@ class App:
             def _vtg():
                 token = str(gs.telegram_token or "").strip()
                 chat_id = str(gs.telegram_chat_id or "").strip()
-                if not token and not chat_id:
-                    self.log.write("Telegram: 未填写，跳过验证（可选）")
+                if not token or not chat_id:
+                    self.log.write("Telegram: 未填写完整，跳过验证（可选）")
                     results["TG"] = True
                     return
                 try:
