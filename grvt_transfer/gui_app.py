@@ -218,6 +218,7 @@ class App:
 
         self._runner: RebalanceRunner | None = None
         self._validated_ok = False
+        # maxIterations removed from UI; keep internal default as 0 (= no limit).
 
         self._build_ui()
         self._load_into_ui()
@@ -326,7 +327,6 @@ class App:
         self.v_unwind_dryrun = BooleanVar(value=True)
         self.v_unwind_trigger = StringVar()
         self.v_unwind_recovery = StringVar()
-        self.v_unwind_max_iter = StringVar()
         self.v_unwind_wait = StringVar()
         self.v_unwind_min_notional = StringVar()
 
@@ -340,7 +340,6 @@ class App:
         for label, var in [
             ("触发阈值 (triggerPct, %)", self.v_unwind_trigger),
             ("恢复阈值 (recoveryPct, %)", self.v_unwind_recovery),
-            ("最大轮数 (maxIterations)", self.v_unwind_max_iter),
             ("轮间等待 (waitSecondsBetweenIterations, 秒)", self.v_unwind_wait),
             ("最小名义价值 (minPositionNotional, USDT)", self.v_unwind_min_notional),
         ]:
@@ -377,7 +376,6 @@ class App:
         self.v_unwind_dryrun.set(bool(uw.get("dryRun", True)))
         self.v_unwind_trigger.set(str(uw.get("triggerPct", "")))
         self.v_unwind_recovery.set(str(uw.get("recoveryPct", "")))
-        self.v_unwind_max_iter.set(str(uw.get("maxIterations", "")))
         self.v_unwind_wait.set(str(uw.get("waitSecondsBetweenIterations", "")))
         self.v_unwind_min_notional.set(str(uw.get("minPositionNotional", "")))
 
@@ -395,8 +393,7 @@ class App:
             "dryRun": bool(self.v_unwind_dryrun.get()),
             "triggerPct": float(self.v_unwind_trigger.get().strip() or 0),
             "recoveryPct": float(self.v_unwind_recovery.get().strip() or 0),
-            "maxIterations": int(float(self.v_unwind_max_iter.get().strip() or 0)),
-            "waitSecondsBetweenIterations": int(float(self.v_unwind_wait.get().strip() or 0)),
+            "waitSecondsBetweenIterations": int(float(self.v_unwind_wait.get().strip() or 2)),
             "minPositionNotional": float(self.v_unwind_min_notional.get().strip() or 0),
         }
 

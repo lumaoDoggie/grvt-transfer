@@ -48,9 +48,6 @@ unwind:
   # 恢复阈值（百分比）：当保证金使用率 < 该值 时停止减仓
   recoveryPct: 3
 
-  # 最大减仓轮数：0 表示不限制
-  maxIterations: 0
-
   # 两轮减仓之间的冷却时间（秒）
   waitSecondsBetweenIterations: 2
 
