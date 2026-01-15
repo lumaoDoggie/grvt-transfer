@@ -35,15 +35,31 @@ def _load_yaml_optional(path: str) -> dict:
 
 
 def _prod_defaults() -> dict:
-    # Use repo defaults as initial GUI values.
+    # Backward-compatible helper (old settings assume prod).
     return _load_yaml_optional(os.path.join("config", "prod", "config.yaml"))
+
+
+def _env_defaults(env: str) -> dict:
+    env = str(env or "prod").lower()
+    return _load_yaml_optional(os.path.join("config", env, "config.yaml"))
 
 
 def _read_settings() -> dict:
     p = _settings_path()
     try:
         if p.exists():
-            return json.loads(p.read_text(encoding="utf-8")) or {}
+            raw = json.loads(p.read_text(encoding="utf-8")) or {}
+            # Migrate old flat format to per-env structure.
+            if "envs" not in raw:
+                prod = {
+                    "telegram_token": raw.get("telegram_token", ""),
+                    "telegram_chat_id": raw.get("telegram_chat_id", ""),
+                    "account_a": raw.get("account_a") or {},
+                    "account_b": raw.get("account_b") or {},
+                    "base_cfg": raw.get("base_cfg") or {},
+                }
+                return {"selected_env": "prod", "envs": {"prod": prod}}
+            return raw
     except Exception:
         pass
     return {}
@@ -116,9 +132,6 @@ def _validate_grvt_account(name: str, cfg: dict) -> tuple[bool, str]:
     except Exception as e:
         return False, f"{name}: 私钥格式不合法: {e}"
 
-    # Force prod for GUI.
-    os.environ["GRVT_ENV"] = "prod"
-
     # Trading summary (auth + subaccount id correctness).
     try:
         client_t = ClientFactory.trading_client(cfg)
@@ -143,6 +156,7 @@ def _validate_grvt_account(name: str, cfg: dict) -> tuple[bool, str]:
 
 @dataclass
 class GuiSettings:
+    env: str = "prod"
     telegram_token: str = ""
     telegram_chat_id: str = ""
     account_a: dict | None = None
@@ -181,25 +195,26 @@ class App:
         self.root = root
         self.root.title("GRVT Rebalance & Transfer Bot")
 
-        os.environ["GRVT_ENV"] = "prod"
+        saved = _read_settings() or {}
+        selected_env = str(saved.get("selected_env") or "prod").lower()
+        envs = dict(saved.get("envs") or {})
+        env_blob = dict(envs.get(selected_env) or {})
 
-        # Defaults from prod config (editable in GUI).
-        defaults = _prod_defaults() or {}
-
-        saved = _read_settings()
-        self.settings = GuiSettings(
-            telegram_token=str(saved.get("telegram_token", "")),
-            telegram_chat_id=str(saved.get("telegram_chat_id", "")),
-            account_a=dict(saved.get("account_a") or {}),
-            account_b=dict(saved.get("account_b") or {}),
-            base_cfg=dict(defaults),
-        )
-        # Overlay saved base_cfg (if present) on top of prod defaults.
+        defaults = _env_defaults(selected_env) or {}
+        base_cfg = dict(defaults)
         try:
-            b = dict(saved.get("base_cfg") or {})
-            self.settings.base_cfg.update(b)
+            base_cfg.update(dict(env_blob.get("base_cfg") or {}))
         except Exception:
             pass
+
+        self.settings = GuiSettings(
+            env=selected_env,
+            telegram_token=str(env_blob.get("telegram_token", "")),
+            telegram_chat_id=str(env_blob.get("telegram_chat_id", "")),
+            account_a=dict(env_blob.get("account_a") or {}),
+            account_b=dict(env_blob.get("account_b") or {}),
+            base_cfg=base_cfg,
+        )
 
         self._runner: RebalanceRunner | None = None
         self._validated_ok = False
@@ -219,6 +234,15 @@ class App:
         # ---- Main tab
         frm_tg = ttk.LabelFrame(self.tab_main, text="Telegram")
         frm_tg.pack(fill="x", padx=5, pady=5)
+
+        frm_env = ttk.LabelFrame(self.tab_main, text="环境")
+        frm_env.pack(fill="x", padx=5, pady=5)
+
+        self.v_env_label = StringVar()
+        ttk.Label(frm_env, text="运行环境").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        self.cmb_env = ttk.Combobox(frm_env, textvariable=self.v_env_label, state="readonly", values=["生产", "测试"], width=12)
+        self.cmb_env.grid(row=0, column=1, sticky="w", padx=5, pady=5)
+        self.cmb_env.bind("<<ComboboxSelected>>", self._on_env_changed)
 
         self.v_tg_token = StringVar()
         self.v_tg_chat = StringVar()
@@ -321,6 +345,7 @@ class App:
         parent.columnconfigure(1, weight=1)
 
     def _load_into_ui(self):
+        self.v_env_label.set("生产" if self.settings.env == "prod" else "测试")
         self.v_tg_token.set(self.settings.telegram_token)
         self.v_tg_chat.set(self.settings.telegram_chat_id)
 
@@ -344,8 +369,9 @@ class App:
         self.v_unwind_min_notional.set(str(uw.get("minPositionNotional", "")))
 
     def _gather_from_ui(self) -> GuiSettings:
+        env = "prod" if (self.v_env_label.get() == "生产") else "test"
         base = dict(self.settings.base_cfg or {})
-        base["environment"] = "prod"
+        base["environment"] = env
         base["triggerValue"] = float(self.v_trigger.get().strip() or 0)
         base["rebalanceIntervalSec"] = int(float(self.v_interval.get().strip() or 15))
         base["fundingSweepThreshold"] = float(self.v_sweep.get().strip() or 0)
@@ -365,10 +391,11 @@ class App:
             d = {}
             for k, _ in self.acc_fields:
                 d[k] = str(vars_map[k].get() or "").strip()
-            d["environment"] = "prod"
+            d["environment"] = env
             return d
 
         return GuiSettings(
+            env=env,
             telegram_token=str(self.v_tg_token.get() or "").strip(),
             telegram_chat_id=str(self.v_tg_chat.get() or "").strip(),
             account_a=gather_acc(self.v_a),
@@ -377,15 +404,56 @@ class App:
         )
 
     def _persist(self, gs: GuiSettings) -> None:
-        _write_settings(
-            {
-                "telegram_token": gs.telegram_token,
-                "telegram_chat_id": gs.telegram_chat_id,
-                "account_a": gs.account_a or {},
-                "account_b": gs.account_b or {},
-                "base_cfg": gs.base_cfg or {},
-            }
+        raw = _read_settings() or {"selected_env": "prod", "envs": {}}
+        envs = dict(raw.get("envs") or {})
+        envs[str(gs.env or "prod").lower()] = {
+            "telegram_token": gs.telegram_token,
+            "telegram_chat_id": gs.telegram_chat_id,
+            "account_a": gs.account_a or {},
+            "account_b": gs.account_b or {},
+            "base_cfg": gs.base_cfg or {},
+        }
+        raw["selected_env"] = str(gs.env or "prod").lower()
+        raw["envs"] = envs
+        _write_settings(raw)
+
+    def _on_env_changed(self, _evt=None):
+        if self._runner and self._runner.running():
+            # Don't allow switching env mid-run.
+            self.v_env_label.set("生产" if self.settings.env == "prod" else "测试")
+            messagebox.showwarning("提示", "运行中无法切换环境，请先停止。")
+            return
+
+        gs = self._gather_from_ui()
+        # Save current env inputs before switching.
+        try:
+            self._persist(gs)
+        except Exception:
+            pass
+
+        new_env = "prod" if (self.v_env_label.get() == "生产") else "test"
+        raw = _read_settings() or {"selected_env": new_env, "envs": {}}
+        env_blob = dict((raw.get("envs") or {}).get(new_env) or {})
+
+        defaults = _env_defaults(new_env) or {}
+        base_cfg = dict(defaults)
+        try:
+            base_cfg.update(dict(env_blob.get("base_cfg") or {}))
+        except Exception:
+            pass
+
+        self.settings = GuiSettings(
+            env=new_env,
+            telegram_token=str(env_blob.get("telegram_token", "")),
+            telegram_chat_id=str(env_blob.get("telegram_chat_id", "")),
+            account_a=dict(env_blob.get("account_a") or {}),
+            account_b=dict(env_blob.get("account_b") or {}),
+            base_cfg=base_cfg,
         )
+        self._validated_ok = False
+        self.btn_start.configure(state="disabled")
+        self._load_into_ui()
+        self.log.write(f"已切换环境：{'生产' if new_env == 'prod' else '测试'}")
 
     def _set_running_ui(self, running: bool) -> None:
         self.btn_validate.configure(state=("disabled" if running else "normal"))
@@ -401,10 +469,10 @@ class App:
         gs = self._gather_from_ui()
         self._persist(gs)
 
-        # Export Telegram settings to env so the running loop/bot uses them.
+        # Export Telegram + env settings to env so the running loop/bot uses them.
         os.environ["TELEGRAM_BOT_TOKEN"] = gs.telegram_token
         os.environ["TELEGRAM_CHAT_ID"] = gs.telegram_chat_id
-        os.environ["GRVT_ENV"] = "prod"
+        os.environ["GRVT_ENV"] = gs.env
 
         self._validated_ok = False
         self.btn_start.configure(state="disabled")
@@ -461,9 +529,9 @@ class App:
 
         os.environ["TELEGRAM_BOT_TOKEN"] = gs.telegram_token
         os.environ["TELEGRAM_CHAT_ID"] = gs.telegram_chat_id
-        os.environ["GRVT_ENV"] = "prod"
+        os.environ["GRVT_ENV"] = gs.env
 
-        repo = InMemoryConfigRepository(gs.base_cfg or {}, gs.account_a or {}, gs.account_b or {})
+        repo = InMemoryConfigRepository(gs.env, gs.base_cfg or {}, gs.account_a or {}, gs.account_b or {})
         self._runner = RebalanceRunner(repo)
         started = self._runner.start()
         if started:

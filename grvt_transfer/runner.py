@@ -17,13 +17,14 @@ class InMemoryConfigRepository:
     to edit YAML files under config/.
     """
 
-    def __init__(self, base_cfg: dict, acc1_cfg: dict, acc2_cfg: dict):
+    def __init__(self, env: str, base_cfg: dict, acc1_cfg: dict, acc2_cfg: dict):
+        self._env = str(env or "prod").lower()
         self._base_cfg = dict(base_cfg or {})
         self._a = dict(acc1_cfg or {})
         self._b = dict(acc2_cfg or {})
 
     def env(self) -> str:
-        return "prod"
+        return self._env
 
     def base(self) -> dict:
         return dict(self._base_cfg)
@@ -68,8 +69,7 @@ class RebalanceRunner:
         self._thread = None
 
     def _run(self) -> None:
-        # GUI always runs prod.
-        os.environ["GRVT_ENV"] = "prod"
+        os.environ["GRVT_ENV"] = self._cfg_repo.env()
 
         base = self._cfg_repo.base()
         trigger = Decimal(str(base.get("triggerValue", "0")))
@@ -116,4 +116,3 @@ class RebalanceRunner:
             stop_bot()
         except Exception:
             pass
-

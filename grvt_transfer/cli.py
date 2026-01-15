@@ -22,7 +22,7 @@ def main(argv: list[str] | None = None) -> int:
     p_run = sub.add_parser("run", help="Run the rebalance loop (starts Telegram bot)")
     p_run.set_defaults(func=_cmd_run)
 
-    p_gui = sub.add_parser("gui", help="Run Windows GUI (prod only)")
+    p_gui = sub.add_parser("gui", help="Run Windows GUI (prod/test selectable)")
     p_gui.set_defaults(func=_cmd_gui)
 
     args = parser.parse_args(argv)

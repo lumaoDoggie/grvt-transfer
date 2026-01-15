@@ -20,7 +20,7 @@ GRVT sites:
 - Never commit secrets (`.env*` is ignored; use `.env.example` as a template).
 - Telegram commands are **locked down**: if `TELEGRAM_CHAT_ID` is set, all other chats are ignored.
 
-## Windows GUI (prod only)
+## Windows GUI (prod/test selectable)
 - Run: `grvt-transfer gui` (or `python -m grvt_transfer gui`)
 - Flow: fill credentials → click `验证` (sends a Telegram test message) → click `开始/停止`
 - Settings file: `%APPDATA%\\grvt-transfer\\settings.json` (contains secrets)

@@ -30,7 +30,7 @@ GRVT 站点：
 ### 如果在你自己机器跑也OK, 但是务必保证网络稳定. (grvt api调用不用翻墙, tg通知需要)
 
 ### Windows GUI（推荐：不用进文件夹改配置）
-GUI 提供：`验证`（Telegram + 两个账户）、`开始/停止` 一键运行，默认使用生产环境（prod）。
+GUI 提供：`验证`（Telegram + 两个账户）、`开始/停止` 一键运行，并可在界面里选择 `生产/测试` 环境。
 
 - 运行（源码方式）：`python -m grvt_transfer gui` 或 `grvt-transfer gui`
 - 配置保存位置：`%APPDATA%\\grvt-transfer\\settings.json`（包含密钥，请自行注意电脑安全）
