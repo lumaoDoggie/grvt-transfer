@@ -263,6 +263,8 @@ class App:
         self._runner: RebalanceRunner | None = None
         self._validated_ok = False
         # maxIterations removed from UI; keep internal default as 0 (= no limit).
+        self._tray_icon = None
+        self._closing = False
 
         self._build_ui()
         self._load_into_ui()
@@ -325,9 +327,11 @@ class App:
         self.btn_start = ttk.Button(frm_btn, text="开始", command=self.on_start, state="normal")
         self.btn_stop = ttk.Button(frm_btn, text="停止", command=self.on_stop, state="disabled")
         self.btn_clear = ttk.Button(frm_btn, text="删除配置", command=self.on_clear)
+        self.btn_tray = ttk.Button(frm_btn, text="最小化到托盘", command=self.on_minimize_to_tray)
         self.btn_validate.pack(side="left", padx=5)
         self.btn_start.pack(side="left", padx=5)
         self.btn_stop.pack(side="left", padx=5)
+        self.btn_tray.pack(side="left", padx=5)
 
         self.lbl_state = ttk.Label(frm_btn, text="状态: 未运行")
         self.lbl_state.pack(side="right", padx=5)
@@ -559,6 +563,21 @@ class App:
             started_at = time.time()
         self.root.after(300, lambda: self._poll_stop_complete(started_at))
 
+    def _poll_stop_then_exit(self, started_at: float) -> None:
+        r = self._runner
+        if not r or not r.running():
+            try:
+                if r:
+                    r.stop(timeout_sec=0)
+            except Exception:
+                pass
+            self._shutdown_ui()
+            return
+        if time.time() - started_at > 30:
+            self.log.write("仍在停止中（可能在等待当前 API 调用超时/返回）…")
+            started_at = time.time()
+        self.root.after(300, lambda: self._poll_stop_then_exit(started_at))
+
     def on_validate(self):
         if self._runner and self._runner.running():
             messagebox.showwarning("提示", "正在运行中，无法验证。请先停止。")
@@ -698,6 +717,134 @@ class App:
             pass
         self.root.after(300, lambda: self._poll_stop_complete(time.time()))
 
+    def on_close(self):
+        # User explicitly closes the GUI: ensure background loops stop and then exit.
+        if self._closing:
+            return
+        self._closing = True
+        # Stop tray icon (if any) so the process can exit cleanly.
+        try:
+            self._stop_tray_icon()
+        except Exception:
+            pass
+
+        if self._runner and self._runner.running():
+            self.log.write("窗口关闭：停止中...")
+            self._set_stopping_ui()
+            try:
+                self._runner.request_stop()
+            except Exception:
+                pass
+            self.root.after(200, lambda: self._poll_stop_then_exit(time.time()))
+            return
+
+        self._shutdown_ui()
+
+    def _shutdown_ui(self):
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
+    def _tray_image(self):
+        from pathlib import Path as _Path
+        try:
+            from PIL import Image
+        except Exception:
+            return None
+        # Try project-root image first (works for source + PyInstaller if bundled).
+        candidates = [
+            _Path(__file__).resolve().parent.parent / "image.png",
+            _Path(__file__).resolve().parent / "image.png",
+        ]
+        for p in candidates:
+            try:
+                if p.exists():
+                    return Image.open(str(p)).convert("RGBA")
+            except Exception:
+                pass
+        # Fallback: small blank icon.
+        try:
+            return Image.new("RGBA", (64, 64), (30, 30, 30, 255))
+        except Exception:
+            return None
+
+    def _stop_tray_icon(self):
+        icon = self._tray_icon
+        self._tray_icon = None
+        if icon is None:
+            return
+        try:
+            icon.stop()
+        except Exception:
+            pass
+
+    def on_minimize_to_tray(self):
+        try:
+            import pystray
+        except Exception:
+            messagebox.showerror("缺少依赖", "托盘功能需要安装依赖：pystray 和 pillow\n\n请运行：pip install -r requirements.txt")
+            return
+        try:
+            from pystray import MenuItem as _MI, Menu as _Menu
+        except Exception:
+            messagebox.showerror("缺少依赖", "托盘功能初始化失败（pystray 版本不兼容）。\n\n请更新：pip install -U pystray pillow")
+            return
+
+        if self._tray_icon is not None:
+            # Already in tray.
+            try:
+                self.root.withdraw()
+            except Exception:
+                pass
+            return
+
+        img = self._tray_image()
+        if img is None:
+            messagebox.showerror("缺少依赖", "托盘图标加载失败（需要 pillow）。\n\n请运行：pip install -r requirements.txt")
+            return
+
+        def _restore(_icon=None, _item=None):
+            try:
+                self.root.after(0, self._restore_from_tray)
+            except Exception:
+                pass
+
+        def _exit(_icon=None, _item=None):
+            try:
+                self.root.after(0, self.on_close)
+            except Exception:
+                pass
+
+        icon = pystray.Icon(
+            "grvt-transfer",
+            img,
+            "GRVT Rebalance & Transfer Bot",
+            menu=_Menu(
+                _MI("显示", _restore, default=True),
+                _MI("退出", _exit),
+            ),
+        )
+        self._tray_icon = icon
+        try:
+            self.root.withdraw()
+        except Exception:
+            pass
+
+        # Run tray icon in a background thread so Tk mainloop stays responsive.
+        threading.Thread(target=icon.run, daemon=True).start()
+
+    def _restore_from_tray(self):
+        try:
+            self._stop_tray_icon()
+        except Exception:
+            pass
+        try:
+            self.root.deiconify()
+            self.root.lift()
+        except Exception:
+            pass
+
     def on_clear(self):
         if self._runner and self._runner.running():
             messagebox.showwarning("提示", "运行中无法清空，请先停止。")
@@ -741,7 +888,7 @@ def main():
     except Exception:
         pass
     app = App(root)
-    root.protocol("WM_DELETE_WINDOW", lambda: (app.on_stop(), root.destroy()))
+    root.protocol("WM_DELETE_WINDOW", app.on_close)
     root.mainloop()
 
 

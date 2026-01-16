@@ -179,8 +179,8 @@ class UnwindService:
 
     def calc_hedged_unwind_size(self, eq1: Decimal, mm1: Decimal, eq2: Decimal, mm2: Decimal,
                                  pos1_size: Decimal, pos2_size: Decimal, recovery_pct: Decimal) -> Decimal:
-        """Calculate unwind size to reach recovery within ~10 iterations."""
-        iterations = Decimal("10")
+        """Calculate unwind size to reach recovery within ~5 iterations."""
+        iterations = Decimal("5")
         pct1 = (mm1 / eq1) * Decimal("100") if eq1 > 0 else Decimal("0")
         pct2 = (mm2 / eq2) * Decimal("100") if eq2 > 0 else Decimal("0")
         max_pct = max(pct1, pct2)
@@ -645,6 +645,11 @@ class UnwindService:
         trigger2 = self.should_trigger(eq2, mm2, trigger_pct)
 
         if not trigger1 and not trigger2:
+            try:
+                import state
+                state.set_unwind_progress(in_progress=False)
+            except Exception:
+                pass
             return {
                 "action": "no_trigger",
                 "eq1": str(eq1), "mm1": str(mm1), "pct1": pct1_str,
@@ -701,14 +706,45 @@ class UnwindService:
         for iteration in range(max_iterations):
             # Refresh equity and margin
             from rebalance.services import SummaryService
-            eq1, mm1, _, _ = SummaryService.trading_summary(cfg1)
-            eq2, mm2, _, _ = SummaryService.trading_summary(cfg2)
+            eq1, mm1, avail1, _ = SummaryService.trading_summary(cfg1)
+            eq2, mm2, avail2, _ = SummaryService.trading_summary(cfg2)
             positions1 = PositionService.get_positions(cfg1)
             positions2 = PositionService.get_positions(cfg2)
 
             # Check recovery using percentage-based logic
             recovered1 = self.is_recovered(eq1, mm1, recovery_pct)
             recovered2 = self.is_recovered(eq2, mm2, recovery_pct)
+
+            # Update shared status so Telegram '查看' reflects unwind progress.
+            try:
+                import state
+                pct1 = self.calc_margin_pct(eq1, mm1)
+                pct2 = self.calc_margin_pct(eq2, mm2)
+                pct1_str = f"{pct1:.1f}%" if pct1 is not None else "N/A"
+                pct2_str = f"{pct2:.1f}%" if pct2 is not None else "N/A"
+                state.set_unwind_progress(
+                    in_progress=True,
+                    iteration=int(iteration) + 1,
+                    pct_a=pct1_str,
+                    pct_b=pct2_str,
+                    trigger_pct=f"{trigger_pct}%",
+                    recovery_pct=f"{recovery_pct}%",
+                )
+                state.set_last_check_time(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+                state.set_last_status({
+                    "event_time_sh": state.get_last_check_time(),
+                    "action": "unwind",
+                    "trigger": str(base_cfg.get("triggerValue", "")),
+                    "delta": str(eq1 - eq2),
+                    "eq1": str(eq1),
+                    "eq2": str(eq2),
+                    "mm1": str(mm1),
+                    "mm2": str(mm2),
+                    "avail1": str(avail1),
+                    "avail2": str(avail2),
+                })
+            except Exception:
+                pass
             if recovered1 and recovered2:
                 pct1 = self.calc_margin_pct(eq1, mm1)
                 pct2 = self.calc_margin_pct(eq2, mm2)
@@ -735,7 +771,7 @@ class UnwindService:
 
             # Unwind all matched (hedged) instruments, with order sizes proportional to current position sizes.
             # A single dynamic ratio is computed from margin stress and then applied to each position size.
-            target_iters = min(max_iterations, 10) if max_iterations > 0 else 10
+            target_iters = min(max_iterations, 5) if max_iterations > 0 else 5
             computed_ratio = self.calc_unwind_ratio(eq1, mm1, eq2, mm2, recovery_pct, target_iters)
             max_ratio = (unwind_pct / Decimal("100")) if unwind_pct > Decimal("0") else Decimal("1")
             unwind_ratio = min(computed_ratio, max_ratio)
@@ -870,6 +906,12 @@ class UnwindService:
         try:
             from alerts.services import AlertService
             AlertService.dispatch_unwind_event(summary)
+        except Exception:
+            pass
+
+        try:
+            import state
+            state.set_unwind_progress(in_progress=False)
         except Exception:
             pass
 

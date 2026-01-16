@@ -27,7 +27,7 @@ jobs:
       - name: Build exe (PyInstaller)
         run: |
           pyinstaller --noconfirm --clean --onefile --console --name grvt-transfer-cli pyinstaller_entry.py
-          pyinstaller --noconfirm --clean --onefile --windowed --name grvt-transfer pyinstaller_gui_entry.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name grvt-transfer --collect-all pystray --collect-all PIL pyinstaller_gui_entry.py
 
       - name: Prepare release bundle
         shell: pwsh

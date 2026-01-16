@@ -309,6 +309,10 @@ class RebalanceService:
             }
             self.noop_logger.info(json.dumps(one_line, default=str))
             try:
+                state.set_last_status(one_line)
+            except Exception:
+                pass
+            try:
                 from alerts.services import AlertService
                 AlertService.dispatch_rebalance_event(one_line)
             except Exception:
@@ -366,6 +370,10 @@ class RebalanceService:
             },
         }
         self.logger.info(json.dumps(one_line, default=str))
+        try:
+            state.set_last_status(one_line)
+        except Exception:
+            pass
         try:
             from alerts.services import AlertService
             AlertService.dispatch_rebalance_event(one_line)

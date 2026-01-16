@@ -350,6 +350,73 @@ def _get_margin_status():
             )
         return text
 
+    # Prefer in-process snapshots from the running loop (rebalance/unwind).
+    try:
+        import state as _state
+        snap = _state.get_last_status()
+        prog = _state.get_unwind_progress()
+        if isinstance(snap, dict) and snap:
+            now_str = _state.get_last_check_time() or str(snap.get("event_time_sh") or "")
+            if not str(now_str or "").strip():
+                now_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+
+            # trigger stored as string in service logs
+            try:
+                trigger = float(str(snap.get("trigger", "0")).strip() or 0)
+            except Exception:
+                trigger = 0.0
+
+            def _d(v) -> Decimal:
+                try:
+                    return Decimal(str(v))
+                except Exception:
+                    return Decimal("0")
+
+            eq_a = _d(snap.get("eq1"))
+            eq_b = _d(snap.get("eq2"))
+            mm_a = _d(snap.get("mm1"))
+            mm_b = _d(snap.get("mm2"))
+            avail_a = _d(snap.get("avail1"))
+            avail_b = _d(snap.get("avail2"))
+
+            # Unwind thresholds: prefer live progress fields, otherwise config defaults.
+            try:
+                trigger_pct = float(str(prog.get("trigger_pct", "0")).replace("%", "").strip() or 0)
+            except Exception:
+                trigger_pct = 0.0
+            try:
+                recovery_pct = float(str(prog.get("recovery_pct", "0")).replace("%", "").strip() or 0)
+            except Exception:
+                recovery_pct = 0.0
+
+            text = _format_status(
+                now_str=str(now_str),
+                trigger=trigger,
+                trigger_pct=(trigger_pct or 0.0),
+                recovery_pct=(recovery_pct or 0.0),
+                show_unwind_thresholds=bool(trigger_pct or recovery_pct),
+                eq_a=eq_a,
+                mm_a=mm_a,
+                avail_a=avail_a,
+                eq_b=eq_b,
+                mm_b=mm_b,
+                avail_b=avail_b,
+            )
+
+            if bool(prog.get("in_progress")):
+                it = int(prog.get("iteration", 0) or 0)
+                p1 = str(prog.get("pct_a") or "")
+                p2 = str(prog.get("pct_b") or "")
+                # Inject unwind banner after the first line.
+                lines = text.splitlines()
+                banner = f"🛠 正在紧急减仓中（第 {it} 轮） A保证金使用率={p1} | B保证金使用率={p2}"
+                if lines:
+                    lines.insert(1, banner)
+                    text = "\n".join(lines)
+            return text
+    except Exception:
+        pass
+
     last_error = None
     for attempt in range(3):
         try:
