@@ -379,42 +379,55 @@ def _get_margin_status():
             avail_a = _d(snap.get("avail1"))
             avail_b = _d(snap.get("avail2"))
 
-            # Unwind thresholds: prefer live progress fields; fall back to runtime/config defaults.
-            try:
-                trigger_pct = float(str(prog.get("trigger_pct", "0")).replace("%", "").strip() or 0)
-            except Exception:
-                trigger_pct = 0.0
-            try:
-                recovery_pct = float(str(prog.get("recovery_pct", "0")).replace("%", "").strip() or 0)
-            except Exception:
-                recovery_pct = 0.0
-
-            show_unwind_thresholds = False
-            if trigger_pct or recovery_pct:
-                show_unwind_thresholds = True
-            else:
-                # Prefer the runtime state written by GUI/CLI runner (matches current running settings).
+            def _parse_num(v):
+                if v is None:
+                    return None
+                s = str(v).strip()
+                if not s:
+                    return None
+                # Allow formats like "5%", "<3%", etc.
+                s = s.replace("%", "").replace("<", "").replace(">", "").strip()
                 try:
-                    rs = _read_runtime_state()
-                    uw = (rs.get("unwind") or {}) if isinstance(rs, dict) else {}
-                    if isinstance(uw, dict) and bool(uw.get("enabled", False)):
-                        trigger_pct = float(uw.get("triggerPct") or 0)
-                        recovery_pct = float(uw.get("recoveryPct") or 0)
-                        show_unwind_thresholds = bool(trigger_pct or recovery_pct)
+                    return float(s)
+                except Exception:
+                    return None
+
+            # Always show unwind thresholds when unwind is enabled (even if values are 0/blank).
+            unwind_enabled = None
+            trigger_pct = _parse_num((prog or {}).get("trigger_pct"))
+            recovery_pct = _parse_num((prog or {}).get("recovery_pct"))
+
+            # Prefer the runtime state written by GUI/CLI runner (matches current running settings).
+            try:
+                rs = _read_runtime_state()
+                uw = (rs.get("unwind") or {}) if isinstance(rs, dict) else {}
+                if isinstance(uw, dict) and "enabled" in uw:
+                    unwind_enabled = bool(uw.get("enabled", False))
+                if trigger_pct is None:
+                    trigger_pct = _parse_num(uw.get("triggerPct")) if isinstance(uw, dict) else None
+                if recovery_pct is None:
+                    recovery_pct = _parse_num(uw.get("recoveryPct")) if isinstance(uw, dict) else None
+            except Exception:
+                pass
+
+            # Fall back to env YAML config.
+            if unwind_enabled is None or trigger_pct is None or recovery_pct is None:
+                try:
+                    root_cfg = _load_yaml(_get_env_config_path()) or {}
+                    uw = (root_cfg.get("unwind") or {}) if isinstance(root_cfg, dict) else {}
+                    if isinstance(uw, dict):
+                        if unwind_enabled is None and "enabled" in uw:
+                            unwind_enabled = bool(uw.get("enabled", False))
+                        if trigger_pct is None:
+                            trigger_pct = _parse_num(uw.get("triggerPct"))
+                        if recovery_pct is None:
+                            recovery_pct = _parse_num(uw.get("recoveryPct"))
                 except Exception:
                     pass
 
-                # Finally fall back to env YAML config.
-                if not show_unwind_thresholds:
-                    try:
-                        root_cfg = _load_yaml(_get_env_config_path()) or {}
-                        uw = (root_cfg.get("unwind") or {}) if isinstance(root_cfg, dict) else {}
-                        if isinstance(uw, dict) and bool(uw.get("enabled", False)):
-                            trigger_pct = float(uw.get("triggerPct") or 0)
-                            recovery_pct = float(uw.get("recoveryPct") or 0)
-                            show_unwind_thresholds = bool(trigger_pct or recovery_pct)
-                    except Exception:
-                        pass
+            show_unwind_thresholds = bool(unwind_enabled)
+            trigger_pct = float(trigger_pct or 0.0)
+            recovery_pct = float(recovery_pct or 0.0)
 
             text = _format_status(
                 now_str=str(now_str),
