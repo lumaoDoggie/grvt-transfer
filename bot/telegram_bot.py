@@ -379,7 +379,7 @@ def _get_margin_status():
             avail_a = _d(snap.get("avail1"))
             avail_b = _d(snap.get("avail2"))
 
-            # Unwind thresholds: prefer live progress fields, otherwise config defaults.
+            # Unwind thresholds: prefer live progress fields; fall back to runtime/config defaults.
             try:
                 trigger_pct = float(str(prog.get("trigger_pct", "0")).replace("%", "").strip() or 0)
             except Exception:
@@ -389,12 +389,39 @@ def _get_margin_status():
             except Exception:
                 recovery_pct = 0.0
 
+            show_unwind_thresholds = False
+            if trigger_pct or recovery_pct:
+                show_unwind_thresholds = True
+            else:
+                # Prefer the runtime state written by GUI/CLI runner (matches current running settings).
+                try:
+                    rs = _read_runtime_state()
+                    uw = (rs.get("unwind") or {}) if isinstance(rs, dict) else {}
+                    if isinstance(uw, dict) and bool(uw.get("enabled", False)):
+                        trigger_pct = float(uw.get("triggerPct") or 0)
+                        recovery_pct = float(uw.get("recoveryPct") or 0)
+                        show_unwind_thresholds = bool(trigger_pct or recovery_pct)
+                except Exception:
+                    pass
+
+                # Finally fall back to env YAML config.
+                if not show_unwind_thresholds:
+                    try:
+                        root_cfg = _load_yaml(_get_env_config_path()) or {}
+                        uw = (root_cfg.get("unwind") or {}) if isinstance(root_cfg, dict) else {}
+                        if isinstance(uw, dict) and bool(uw.get("enabled", False)):
+                            trigger_pct = float(uw.get("triggerPct") or 0)
+                            recovery_pct = float(uw.get("recoveryPct") or 0)
+                            show_unwind_thresholds = bool(trigger_pct or recovery_pct)
+                    except Exception:
+                        pass
+
             text = _format_status(
                 now_str=str(now_str),
                 trigger=trigger,
                 trigger_pct=(trigger_pct or 0.0),
                 recovery_pct=(recovery_pct or 0.0),
-                show_unwind_thresholds=bool(trigger_pct or recovery_pct),
+                show_unwind_thresholds=show_unwind_thresholds,
                 eq_a=eq_a,
                 mm_a=mm_a,
                 avail_a=avail_a,
