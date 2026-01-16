@@ -4,7 +4,8 @@ import argparse
 def _cmd_run(_: argparse.Namespace) -> int:
     from rebalance_trading_equity import main_cli
 
-    main_cli()
+    # Avoid passing our "run" subcommand down to rebalance_trading_equity's argparse.
+    main_cli([])
     return 0
 
 

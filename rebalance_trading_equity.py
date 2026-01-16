@@ -100,7 +100,7 @@ def rebalance_once(trigger: Decimal, throttle_ms: int = 0):
     return RebalanceService(repo, logger, noop_logger).rebalance_once(trigger, throttle_ms=throttle_ms)
 
 
-def main_cli():
+def main_cli(argv: list[str] | None = None):
     import argparse
     repo = ConfigRepository()
     base = repo.base()
@@ -109,7 +109,7 @@ def main_cli():
     parser.add_argument("--trigger", type=float, default=None)
     parser.add_argument("--throttleMs", type=int, default=None)
     parser.add_argument("--once", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     trigger = Decimal(str(args.trigger if args.trigger is not None else base.get("triggerValue", "0.03")))
     interval = int(args.interval if args.interval is not None else int(base.get("rebalanceIntervalSec", 10)))
     throttle_ms = int(args.throttleMs if args.throttleMs is not None else 2000)
