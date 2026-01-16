@@ -116,5 +116,8 @@ docker compose up -d
 
 ---
 
-## License
-MIT（见 `LICENSE`）
+## 欢迎大家走我的邀请注册Grvt, 全网最高的每个月手动返 35%交易手续费,  并且会有1.3倍积分加成. 
+### Grvt 注册链接: https://grvt.io/?ref=lumaoDoggie 
+### 领取手续费返佣, 脚本问题反馈, 撸毛交流 请加入群聊 https://t.me/+Oe-Ul8Pzyck4ZGQ1
+
+
