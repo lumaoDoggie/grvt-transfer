@@ -3,10 +3,11 @@ import os
 import queue
 import threading
 import time
+import webbrowser
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from tkinter import Tk, StringVar, BooleanVar, Text, ttk, messagebox
+from tkinter import Tk, StringVar, BooleanVar, Text, Toplevel, Label, ttk, messagebox
 
 import yaml
 
@@ -265,13 +266,18 @@ class App:
         # maxIterations removed from UI; keep internal default as 0 (= no limit).
         self._tray_icon = None
         self._closing = False
+        self._about_win: Toplevel | None = None
 
         self._build_ui()
         self._load_into_ui()
 
     def _build_ui(self):
+        topbar = ttk.Frame(self.root)
+        topbar.pack(fill="x", padx=10, pady=(10, 0))
+        ttk.Button(topbar, text="关于", command=self.on_about).pack(side="right")
+
         nb = ttk.Notebook(self.root)
-        nb.pack(fill="both", expand=True, padx=10, pady=10)
+        nb.pack(fill="both", expand=True, padx=10, pady=(8, 10))
 
         self.tab_main = ttk.Frame(nb)
         self.tab_adv = ttk.Frame(nb)
@@ -878,6 +884,52 @@ class App:
         except Exception:
             pass
         self.log.write("已清空并保存。")
+
+    def on_about(self):
+        if self._about_win is not None:
+            try:
+                self._about_win.lift()
+                return
+            except Exception:
+                self._about_win = None
+
+        w = Toplevel(self.root)
+        self._about_win = w
+        w.title("关于")
+        w.resizable(False, False)
+        try:
+            w.transient(self.root)
+        except Exception:
+            pass
+
+        def _on_close():
+            try:
+                w.destroy()
+            finally:
+                self._about_win = None
+
+        w.protocol("WM_DELETE_WINDOW", _on_close)
+
+        frm = ttk.Frame(w, padding=12)
+        frm.pack(fill="both", expand=True)
+
+        ttk.Label(frm, text="作者: 撸毛小狗 ").grid(row=0, column=0, sticky="w")
+        l1 = Label(frm, text="x.com/LumaoDoggie", fg="#1a0dab", cursor="hand2")
+        l1.grid(row=0, column=1, sticky="w")
+        l1.bind("<Button-1>", lambda _e: self._open_url("https://x.com/LumaoDoggie"))
+
+        ttk.Label(frm, text="GRVT 35%返佣+1.3X积分加成 ").grid(row=1, column=0, sticky="w", pady=(8, 0))
+        l2 = Label(frm, text="https://grvt.io/?ref=lumaoDoggie", fg="#1a0dab", cursor="hand2")
+        l2.grid(row=1, column=1, sticky="w", pady=(8, 0))
+        l2.bind("<Button-1>", lambda _e: self._open_url("https://grvt.io/?ref=lumaoDoggie"))
+
+        frm.columnconfigure(1, weight=1)
+
+    def _open_url(self, url: str):
+        try:
+            webbrowser.open_new_tab(str(url))
+        except Exception as e:
+            messagebox.showerror("打开链接失败", f"无法打开链接：{url}\n\n{e}")
 
 
 def main():
