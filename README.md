@@ -32,10 +32,9 @@ GRVT 站点：
 2. TG 上搜索 @userinfobot 这个机器人, 拿到你的chatId,发消息即可看到,回复里的那串数字就是。 
 3. 在两个Grvt账号里, 给FundingAccount 和 TradingAccount创建Api,  funding account的权限勾选(Internal Transfer; External Transfer), tradingAccount的勾选"Transfer; Trade"
 记录好分别对应的key,secret, id.  两个账号还需要绑定Google Authenticator验证器, 需要下载一个然后扫码绑定账号.
-4. 
-- 从GitHub Releases ,选择最新版本,下载 `grvt-transfer-windows.zip` 并解压
-- 运行：双击 `grvt-transfer.exe`
-5. 然后在页面里选择测试或者正式环境, 然后填入以上信息, 点击"验证", 验证通过后点击"开始"
+4. grvt "Address Book"里,把你的两个账号互相添加进白名单
+5. 从GitHub Releases ,选择最新版本,下载 `grvt-transfer-windows.zip` 并解压. 运行：双击 `grvt-transfer.exe`
+6. 然后在页面里选择测试或者正式环境, 然后填入以上信息, 点击"验证", 验证通过后点击"开始"
 
 - 配置保存位置：`%APPDATA%\\grvt-transfer\\settings.json`（包含api key/secret，请自行注意电脑安全）
 
