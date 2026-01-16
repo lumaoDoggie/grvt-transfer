@@ -47,11 +47,11 @@ GRVT 站点：
 
 ---
 
-## Linux VPS docker部署
-前置：VPS 已安装 Docker Engine + Docker Compose 插件。
+## Linux 和 Mac docker部署
+前提要求： 已安装 Docker Engine + Docker Compose 插件。
 
 ```bash
-git clone <你的仓库地址>
+git clone https://github.com/lumaoDoggie/grvt-transfer.git
 cd grvt-transfer
 cp .env.example .env
 # 编辑 .env 和 config/<env>/*.yaml
@@ -65,7 +65,7 @@ docker compose up -d
 
 ---
 
-## 配置说明（避免歧义）
+## 配置说明
 - 运行环境由 `GRVT_ENV=test|prod` 决定（来自 `.env` 或 shell）
 - 配置文件**只会读取** `config/<env>/...`（仓库根目录不存在 `config.yaml`）
 - 告警阈值配置在：`config/<env>/config.yaml`
