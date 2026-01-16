@@ -10,9 +10,9 @@ COPY requirements.txt /app/requirements.txt
 RUN python -m pip install --upgrade pip && pip install -r /app/requirements.txt
 
 COPY . /app
+RUN pip install --no-deps .
 
 # Default state dir for containers (mount /app/data if you want persistence)
 ENV GRVT_STATE_DIR=/app/data/bot
 
 CMD ["grvt-transfer", "run"]
-
