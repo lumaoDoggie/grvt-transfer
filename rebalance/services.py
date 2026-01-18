@@ -225,26 +225,27 @@ class RebalanceService:
 
         pct1 = (avail1 / eq1 * Decimal("100")) if eq1 > Decimal("0") else Decimal("0")
         pct2 = (avail2 / eq2 * Decimal("100")) if eq2 > Decimal("0") else Decimal("0")
-        alert_pct = Decimal(str(base_cfg.get("minAvailableBalanceAlertPercentage", 20)))
-        try:
-            from alerts.services import AlertService
-            # Skip alert if equity is 0 (likely API error)
-            if pct1 < alert_pct and eq1 > Decimal("0"):
-                AlertService.dispatch_availability_alert("A", {
-                    "event_time_sh": TimeUtil.event_time_sh(t1),
-                    "equity": str(eq1),
-                    "available": str(avail1),
-                    "avail_pct": f"{pct1:.4f}",
-                })
-            if pct2 < alert_pct and eq2 > Decimal("0"):
-                AlertService.dispatch_availability_alert("B", {
-                    "event_time_sh": TimeUtil.event_time_sh(t2),
-                    "equity": str(eq2),
-                    "available": str(avail2),
-                    "avail_pct": f"{pct2:.4f}",
-                })
-        except Exception:
-            pass
+        if bool(base_cfg.get("availableBalanceAlertEnabled", True)):
+            alert_pct = Decimal(str(base_cfg.get("minAvailableBalanceAlertPercentage", 20)))
+            try:
+                from alerts.services import AlertService
+                # Skip alert if equity is 0 (likely API error)
+                if pct1 < alert_pct and eq1 > Decimal("0"):
+                    AlertService.dispatch_availability_alert("A", {
+                        "event_time_sh": TimeUtil.event_time_sh(t1),
+                        "equity": str(eq1),
+                        "available": str(avail1),
+                        "avail_pct": f"{pct1:.4f}",
+                    })
+                if pct2 < alert_pct and eq2 > Decimal("0"):
+                    AlertService.dispatch_availability_alert("B", {
+                        "event_time_sh": TimeUtil.event_time_sh(t2),
+                        "equity": str(eq2),
+                        "available": str(avail2),
+                        "avail_pct": f"{pct2:.4f}",
+                    })
+            except Exception:
+                pass
 
         # Emergency position unwinding check
         unwind_cfg = base_cfg.get("unwind", {})

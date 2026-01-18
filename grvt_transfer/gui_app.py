@@ -360,6 +360,7 @@ class App:
         self.v_interval = StringVar()
         self.v_sweep = StringVar()
         self.v_min_avail_pct = StringVar()
+        self.v_avail_alert_enabled = BooleanVar(value=True)
 
         # Track widgets that should be disabled while running.
         self._adv_widgets: list = []
@@ -369,13 +370,30 @@ class App:
             ("再平衡触发阈值 (triggerValue, USDT)", self.v_trigger),
             ("检查间隔 (rebalanceIntervalSec, 秒)", self.v_interval),
             ("资金归集阈值 (fundingSweepThreshold, USDT)", self.v_sweep),
-            ("可用余额告警阈值 (minAvailableBalanceAlertPercentage, %)", self.v_min_avail_pct),
         ]:
             ttk.Label(frm_cfg, text=label).grid(row=row, column=0, sticky="w", padx=5, pady=5)
             e = ttk.Entry(frm_cfg, textvariable=var, width=30)
             e.grid(row=row, column=1, sticky="w", padx=5, pady=5)
             self._adv_widgets.append(e)
             row += 1
+
+        # Available-balance alert can be enabled/disabled. When disabled, hide its threshold input.
+        cb_avail_alert = ttk.Checkbutton(
+            frm_cfg,
+            text="启用可用余额告警（高级）",
+            variable=self.v_avail_alert_enabled,
+            command=self._update_avail_alert_ui,
+        )
+        cb_avail_alert.grid(row=row, column=0, columnspan=2, sticky="w", padx=5, pady=(5, 0))
+        self._adv_widgets.append(cb_avail_alert)
+        row += 1
+
+        self._min_avail_label = ttk.Label(frm_cfg, text="可用余额告警阈值 (minAvailableBalanceAlertPercentage, %)")
+        self._min_avail_entry = ttk.Entry(frm_cfg, textvariable=self.v_min_avail_pct, width=30)
+        self._min_avail_label.grid(row=row, column=0, sticky="w", padx=5, pady=5)
+        self._min_avail_entry.grid(row=row, column=1, sticky="w", padx=5, pady=5)
+        self._adv_widgets.append(self._min_avail_entry)
+        row += 1
 
         frm_unwind = ttk.LabelFrame(self.tab_adv, text="紧急减仓（unwind）")
         frm_unwind.pack(fill="x", padx=5, pady=5)
@@ -427,6 +445,8 @@ class App:
         self.v_interval.set(str(b.get("rebalanceIntervalSec", "")))
         self.v_sweep.set(str(b.get("fundingSweepThreshold", "")))
         self.v_min_avail_pct.set(str(b.get("minAvailableBalanceAlertPercentage", "")))
+        self.v_avail_alert_enabled.set(bool(b.get("availableBalanceAlertEnabled", True)))
+        self._update_avail_alert_ui()
 
         uw = (b.get("unwind") or {}) if isinstance(b, dict) else {}
         self.v_unwind_enabled.set(bool(uw.get("enabled", True)))
@@ -444,6 +464,7 @@ class App:
         base["rebalanceIntervalSec"] = int(float(self.v_interval.get().strip() or 15))
         base["fundingSweepThreshold"] = float(self.v_sweep.get().strip() or 0)
         base["minAvailableBalanceAlertPercentage"] = float(self.v_min_avail_pct.get().strip() or 0)
+        base["availableBalanceAlertEnabled"] = bool(self.v_avail_alert_enabled.get())
 
         base["unwind"] = {
             "enabled": bool(self.v_unwind_enabled.get()),
@@ -469,6 +490,19 @@ class App:
             account_b=gather_acc(self.v_b),
             base_cfg=base,
         )
+
+    def _update_avail_alert_ui(self) -> None:
+        """Show/hide the threshold field based on the enable checkbox."""
+        enabled = bool(self.v_avail_alert_enabled.get())
+        try:
+            if enabled:
+                self._min_avail_label.grid()
+                self._min_avail_entry.grid()
+            else:
+                self._min_avail_label.grid_remove()
+                self._min_avail_entry.grid_remove()
+        except Exception:
+            pass
 
     def _persist(self, gs: GuiSettings) -> None:
         raw = _read_settings() or {"selected_env": "prod", "envs": {}}
