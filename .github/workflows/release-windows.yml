@@ -26,8 +26,9 @@ jobs:
 
       - name: Build exe (PyInstaller)
         run: |
-          pyinstaller --noconfirm --clean --onefile --console --name grvt-transfer-cli pyinstaller_entry.py
-          pyinstaller --noconfirm --clean --onefile --windowed --name grvt-transfer --collect-all pystray --collect-all PIL pyinstaller_gui_entry.py
+          # Collect pycryptodome's native extensions (e.g. Crypto.Hash._keccak) so the exe works on fresh Windows installs.
+          pyinstaller --noconfirm --clean --onefile --console --name grvt-transfer-cli --collect-all Crypto pyinstaller_entry.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name grvt-transfer --collect-all pystray --collect-all PIL --collect-all Crypto pyinstaller_gui_entry.py
 
       - name: Prepare release bundle
         shell: pwsh
@@ -44,6 +45,7 @@ jobs:
           Copy-Item -Force ".env.example" $bundleDir
           Copy-Item -Force "log-config.yaml" $bundleDir
           Copy-Item -Force "README.md" $bundleDir
+          Copy-Item -Force "CHANGELOG.md" $bundleDir
           Copy-Item -Force "LICENSE" $bundleDir
           Copy-Item -Recurse -Force "config" $bundleDir
           Copy-Item -Recurse -Force "scripts/windows" $bundleDir/scripts

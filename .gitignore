@@ -28,3 +28,4 @@ DEPLOYMENT.md
 dist/
 build/
 *.spec
+*.exe
