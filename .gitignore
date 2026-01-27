@@ -29,3 +29,6 @@ dist/
 build/
 *.spec
 *.exe
+
+# Local SSH known-hosts cache file (not a project artifact)
+.ssh_known_hosts
