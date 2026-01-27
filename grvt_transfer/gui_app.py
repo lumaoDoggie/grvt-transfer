@@ -77,9 +77,16 @@ def _telegram_get_json(url: str) -> dict:
     from urllib.request import urlopen
     from urllib.error import HTTPError
     import json as _json
+    import ssl as _ssl
 
     try:
-        with urlopen(url, timeout=25) as resp:
+        # NOTE: Some VPN/proxy setups MITM Telegram traffic with a self-signed cert,
+        # which breaks certificate verification on Windows/Python. We explicitly
+        # disable verification for Telegram calls to keep the app usable.
+        ctx = _ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = _ssl.CERT_NONE
+        with urlopen(url, timeout=25, context=ctx) as resp:
             return _json.loads(resp.read().decode("utf-8"))
     except HTTPError as e:
         try:
@@ -97,11 +104,15 @@ def _telegram_post_json(url: str, payload: dict) -> dict:
     from urllib.request import Request, urlopen
     from urllib.error import HTTPError
     import json as _json
+    import ssl as _ssl
 
     data = _json.dumps(payload).encode("utf-8")
     req = Request(url, data=data, headers={"Content-Type": "application/json"})
     try:
-        with urlopen(req, timeout=25) as resp:
+        ctx = _ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = _ssl.CERT_NONE
+        with urlopen(req, timeout=25, context=ctx) as resp:
             return _json.loads(resp.read().decode("utf-8"))
     except HTTPError as e:
         try:

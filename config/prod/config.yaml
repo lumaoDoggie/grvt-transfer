@@ -23,7 +23,7 @@ fundingSweepThreshold: 0.1
 
 # 可用余额告警阈值（百分比）：当 (available / equity * 100) < 该值 时发送 Telegram 告警（
 # 可用余额不足的情况, 一般出现在一个账户大量未实现盈利的时候. 这时候你需要手动关一些仓位,释放盈利）
-minAvailableBalanceAlertPercentage: 25
+minAvailableBalanceAlertPercentage: 20
 bot:
   # Telegram：建议通过环境变量设置（.env / .env.prod）
   # - TELEGRAM_BOT_TOKEN：机器人 token
@@ -44,7 +44,7 @@ unwind:
   enabled: true
 
   # 是否仅演练（true=只记录/告警，不真正减仓；false=真正减仓）
-  dryRun: true
+  dryRun: false
 
   # 触发阈值（百分比）：当保证金使用率 >= 该值 时触发减仓
   triggerPct: 60
