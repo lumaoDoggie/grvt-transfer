@@ -168,10 +168,10 @@ def _post_json(url: str, obj: dict):
     req = Request(url, data=data, headers={"Content-Type": "application/json"})
 
     # Some proxy/VPN setups MITM Telegram traffic with a self-signed cert, which
-    # breaks TLS verification. Allow an explicit opt-out via env var.
-    ctx = None
-    if str(os.getenv("TELEGRAM_INSECURE_SSL", "") or "").strip().lower() in ("1", "true", "yes", "on"):
-        ctx = ssl.create_default_context()
+    # breaks TLS verification. We disable verification by default for Telegram
+    # calls to keep the bot usable; set TELEGRAM_VERIFY_SSL=1 to enforce checks.
+    ctx = ssl.create_default_context()
+    if str(os.getenv("TELEGRAM_VERIFY_SSL", "") or "").strip().lower() not in ("1", "true", "yes", "on"):
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
 
