@@ -4,6 +4,7 @@ import time
 import atexit
 import threading
 import yaml
+import ssl
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode
 import logging
@@ -165,9 +166,18 @@ def _heartbeat_stale(max_age: int = 30):
 def _post_json(url: str, obj: dict):
     data = json.dumps(obj).encode("utf-8")
     req = Request(url, data=data, headers={"Content-Type": "application/json"})
+
+    # Some proxy/VPN setups MITM Telegram traffic with a self-signed cert, which
+    # breaks TLS verification. Allow an explicit opt-out via env var.
+    ctx = None
+    if str(os.getenv("TELEGRAM_INSECURE_SSL", "") or "").strip().lower() in ("1", "true", "yes", "on"):
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
     for i in range(3):
         try:
-            with urlopen(req, timeout=30) as resp:
+            with urlopen(req, timeout=30, context=ctx) as resp:
                 s = resp.read().decode("utf-8")
                 return json.loads(s)
         except Exception as e:
