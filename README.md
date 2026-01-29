@@ -40,6 +40,7 @@ GRVT 站点：
 6. 然后在页面里选择测试或者正式环境, 然后填入以上信息, 点击"验证", 验证通过后点击"开始"
 
 - 配置保存位置：`%APPDATA%\\grvt-transfer\\settings.json`（包含api key/secret，请自行注意电脑安全）
+- 如果 Telegram 验证报错 `CERTIFICATE_VERIFY_FAILED / self-signed certificate`：通常是 VPN/公司代理/杀软的 HTTPS 解密导致。本项目对 Telegram 请求默认不做证书校验以避免卡住；如需强校验可设置环境变量：`TELEGRAM_VERIFY_SSL=1`。
 
 ![alt text](image.png)
 
@@ -122,5 +123,4 @@ docker compose up -d
 ## 欢迎大家走我的邀请注册Grvt, 全网最高的每个月手动返 35%交易手续费,  并且会有1.3倍积分加成. 
 ### Grvt 注册链接: https://grvt.io/?ref=lumaoDoggie 
 ### 领取手续费返佣, 脚本问题反馈, 撸毛交流 请加入群聊 https://t.me/+Oe-Ul8Pzyck4ZGQ1
-
 
