@@ -389,6 +389,11 @@ def _get_margin_status():
             avail_a = _d(snap.get("avail1"))
             avail_b = _d(snap.get("avail2"))
 
+            # If the in-process snapshot is uninitialized or comes from a transient API failure,
+            # it may contain all zeros. In that case, fall back to log/runtime/API sources.
+            if eq_a == Decimal("0") and eq_b == Decimal("0"):
+                raise ValueError("empty_snapshot_equity")
+
             def _parse_num(v):
                 if v is None:
                     return None
@@ -527,6 +532,10 @@ def _get_margin_status():
                         avail_a = _d(last_event.get("avail1"))
                         avail_b = _d(last_event.get("avail2"))
 
+                    # runtime.json may exist before any successful snapshot; avoid showing an all-zero screen.
+                    if eq_a == Decimal("0") and eq_b == Decimal("0"):
+                        raise ValueError("empty_runtime_last_event_equity")
+
                     return _format_status(
                         now_str=now_str,
                         trigger=float(trigger),
@@ -560,6 +569,10 @@ def _get_margin_status():
                         mm_b = Decimal(str(evt.get("mm2", "0")))
                         avail_a = Decimal(str(evt.get("avail1", "0")))
                         avail_b = Decimal(str(evt.get("avail2", "0")))
+
+                        # Guard against transient "0 equity" log lines (API failures).
+                        if eq_a == Decimal("0") and eq_b == Decimal("0"):
+                            raise ValueError("empty_noop_equity")
                         return _format_status(
                             now_str=now_str,
                             trigger=float(trigger),

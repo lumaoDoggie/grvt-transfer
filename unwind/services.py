@@ -731,18 +731,21 @@ class UnwindService:
                     recovery_pct=f"{recovery_pct}%",
                 )
                 state.set_last_check_time(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
-                state.set_last_status({
-                    "event_time_sh": state.get_last_check_time(),
-                    "action": "unwind",
-                    "trigger": str(base_cfg.get("triggerValue", "")),
-                    "delta": str(eq1 - eq2),
-                    "eq1": str(eq1),
-                    "eq2": str(eq2),
-                    "mm1": str(mm1),
-                    "mm2": str(mm2),
-                    "avail1": str(avail1),
-                    "avail2": str(avail2),
-                })
+                # Avoid overwriting the last good Telegram "查看" snapshot with all zeros,
+                # which is most commonly caused by a transient API failure.
+                if not (eq1 == Decimal("0") and eq2 == Decimal("0")):
+                    state.set_last_status({
+                        "event_time_sh": state.get_last_check_time(),
+                        "action": "unwind",
+                        "trigger": str(base_cfg.get("triggerValue", "")),
+                        "delta": str(eq1 - eq2),
+                        "eq1": str(eq1),
+                        "eq2": str(eq2),
+                        "mm1": str(mm1),
+                        "mm2": str(mm2),
+                        "avail1": str(avail1),
+                        "avail2": str(avail2),
+                    })
             except Exception:
                 pass
             if recovered1 and recovered2:
